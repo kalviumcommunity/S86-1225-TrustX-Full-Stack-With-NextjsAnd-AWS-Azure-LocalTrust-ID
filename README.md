@@ -1,1 +1,1 @@
-# S86-1225-TrustX-Full-Stack-With-NextjsAnd-AWS-Azure-LocalTrust-ID
+# S86-1225-TrustX-Full-Stack-With-NextjsAnd-AWS-Azure-LocalTrust-ID.
