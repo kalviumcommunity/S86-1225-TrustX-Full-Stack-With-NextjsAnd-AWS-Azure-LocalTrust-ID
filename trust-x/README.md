@@ -24,10 +24,30 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 
 To learn more about Next.js, take a look at the following resources:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
 
 You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+
+## Code Quality: TypeScript, ESLint, Prettier, Husky
+
+- **TypeScript (strict)**: `tsconfig.json` enables strict checks (`strict`, `noImplicitAny`, `noUnusedLocals`, `noUnusedParameters`, `forceConsistentCasingInFileNames`, `skipLibCheck`) to catch type errors early and reduce runtime bugs.
+- **ESLint**: Configuration in `.eslintrc.json` extends `next/core-web-vitals` and `plugin:prettier/recommended`. Key rules: `no-console` (warn), `semi` (always), `quotes` (double).
+- **Prettier**: Settings in `.prettierrc` ensure consistent formatting (`singleQuote: false`, `semi: true`, `tabWidth: 2`, `trailingComma: es5`).
+- **Pre-commit hooks**: Husky and `lint-staged` run `eslint --fix` and `prettier --write` on staged `.{ts,tsx,js,jsx}` files to enforce style and fixable lint issues before commits.
+
+Run these locally to apply and verify:
+
+```bash
+cd trust-x
+npm install
+npm run prepare    # runs `husky install` (prepare script added in package.json)
+# make hooks executable (if needed):
+git update-index --add --chmod=+x .husky/pre-commit
+# try a commit to confirm hooks run
+git add .
+git commit -m "test husky lint" || true
+```
+
+If the pre-commit hook blocks commits, fix reported lint/format issues and re-stage the files; `lint-staged` will re-run the fixes automatically.
 
 ## Deploy on Vercel
 

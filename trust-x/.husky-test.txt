@@ -1,0 +1,8 @@
+// husky test
+
+export default function Home() {
+  return (
+    <div>
+      <h1>Welcome to Next.js with TypeScript!</h1>
+  )
+}

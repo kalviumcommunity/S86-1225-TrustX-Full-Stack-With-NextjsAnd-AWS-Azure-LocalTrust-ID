@@ -7,7 +7,6 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "prepare": "husky install",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
