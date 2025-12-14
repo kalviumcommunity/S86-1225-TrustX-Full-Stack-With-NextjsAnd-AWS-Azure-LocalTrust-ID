@@ -34,3 +34,28 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+
+## Environment Variables
+
+This project uses environment variables to manage secrets securely.
+
+### Files
+- `.env.local`: real credentials (ignored by Git)
+- `.env.example`: template for setup
+
+### Server-side variables
+- DATABASE_URL – database connection
+- JWT_SECRET – authentication secret
+
+### Client-side variables
+- NEXT_PUBLIC_API_BASE_URL – API base URL
+
+### Setup
+1. Copy `.env.example` to `.env.local`
+2. Fill real values
+3. Restart server
+
+### Security
+- Secrets never exposed to client
+- `.env.local` is gitignored
