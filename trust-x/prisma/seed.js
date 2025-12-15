@@ -1,27 +1,17 @@
-const { PrismaClient } = require("@prisma/client");
+import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
 async function main() {
-  await prisma.user.create({
-    data: {
-      name: "Dinesh",
-      email: "dinesh@example.com",
-      projects: {
-        create: {
-          title: "Trust-X Platform",
-          tasks: {
-            create: [
-              { title: "Design PostgreSQL schema" },
-              { title: "Docker + Prisma integration" }
-            ]
-          }
-        }
-      }
-    }
+  await prisma.user.createMany({
+    data: [
+      { name: "Alice", email: "alice@example.com", role: "ADMIN" },
+      { name: "Bob", email: "bob@example.com", role: "USER" }
+    ],
+    skipDuplicates: true
   });
 
-  console.log("Seed data inserted");
+  console.log("Seed data inserted successfully");
 }
 
 main()

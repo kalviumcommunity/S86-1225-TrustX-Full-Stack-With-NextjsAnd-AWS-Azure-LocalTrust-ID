@@ -1,5 +1,6 @@
-{
-  "name": "trust-x",
+
+  {
+    "name": "trust-x",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -33,12 +34,8 @@
     "prettier": "^3",
     "prisma": "^6.19.1",
     "tailwindcss": "^4",
-    "typescript": "^5"
-  },
-  "lint-staged": {
-    "*.{ts,tsx,js,jsx}": [
-      "eslint --fix",
-      "prettier --write"
-    ]
+    "ts-node": "^10.9.2",
+      "typescript": "^5"
+    }
   }
-}
+
