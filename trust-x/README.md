@@ -17,3 +17,31 @@ pnpm dev
 # or
 bun dev
 ..
+
+## Prisma ORM Setup & Client Initialization
+
+Prisma ORM was integrated into the Next.js application to provide a type-safe and scalable database access layer.
+
+### Setup Steps
+- Installed and initialized Prisma
+- Defined PostgreSQL models using Prisma schema
+- Generated Prisma Client
+- Created a singleton Prisma client to avoid multiple connections during development
+
+### Client Initialization
+```ts
+import { PrismaClient } from "@prisma/client";
+
+const globalForPrisma = globalThis as unknown as {
+  prisma: PrismaClient | undefined;
+};
+
+export const prisma =
+  globalForPrisma.prisma ??
+  new PrismaClient({
+    log: ["query", "info", "warn", "error"],
+  });
+
+if (process.env.NODE_ENV !== "production") {
+  globalForPrisma.prisma = prisma;
+}
