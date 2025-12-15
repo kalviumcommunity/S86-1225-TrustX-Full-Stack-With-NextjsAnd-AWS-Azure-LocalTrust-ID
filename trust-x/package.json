@@ -13,11 +13,12 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
-    "next": "16.0.8",
+    "next": "^16.0.10",
     "react": "19.2.1",
     "react-dom": "19.2.1"
   },
   "devDependencies": {
+    "@prisma/client": "^6.19.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
@@ -30,6 +31,7 @@
     "husky": "^9",
     "lint-staged": "^15",
     "prettier": "^3",
+    "prisma": "^6.19.1",
     "tailwindcss": "^4",
     "typescript": "^5"
   },
