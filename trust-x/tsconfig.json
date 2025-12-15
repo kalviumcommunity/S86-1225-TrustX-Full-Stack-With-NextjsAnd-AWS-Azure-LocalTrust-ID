@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "ES2017",
+    "target": "ESNext",
     "lib": [
       "dom",
       "dom.iterable",
@@ -9,10 +9,6 @@
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
-    "noImplicitAny": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "forceConsistentCasingInFileNames": true,
     "noEmit": true,
     "esModuleInterop": true,
     "module": "esnext",
@@ -25,27 +21,16 @@
       {
         "name": "next"
       }
-    ],
-    "paths": {
-      "@/*": [
-        "./src/*"
-      ]
-    }
+    ]
   },
   "include": [
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts",
-    "**/*.mts"
+    ".next/dev/types/**/*.ts"
   ],
- env-variable-management
   "exclude": [
     "node_modules"
   ]
 }
-=======
-  "exclude": ["node_modules"]
-}
- main
