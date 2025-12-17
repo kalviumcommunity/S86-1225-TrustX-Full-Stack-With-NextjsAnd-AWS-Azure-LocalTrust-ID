@@ -65,3 +65,31 @@ Benefits
 - Predictable responses for front-end consumers
 - Easier error tracing with error codes and timestamps
 - Simplified monitoring and observability integration
+
+Input validation with Zod
+------------------------
+
+This project uses Zod to validate incoming `POST` and `PUT` requests for products.
+
+Files:
+- `src/lib/schemas/productSchema.ts` — Zod schemas for creating and updating products.
+
+Example usage (server-side):
+
+import { productCreateSchema } from '@/lib/schemas/productSchema';
+import { ZodError } from 'zod';
+
+try {
+  const body = await req.json();
+  const validated = productCreateSchema.parse(body);
+  // use validated values
+} catch (err) {
+  if (err instanceof ZodError) {
+    // return structured validation errors
+  }
+}
+
+Validation benefits:
+- Prevents invalid records entering the database
+- Provides clear client-facing error messages
+- Enables reuse of schemas on client and server
