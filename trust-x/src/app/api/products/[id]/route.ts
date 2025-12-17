@@ -9,6 +9,8 @@ import { NextRequest } from 'next/server';
 import { prisma } from '../../../../lib/prisma';
 import { sendSuccess, sendError } from '../../../../lib/responseHandler';
 import { ERROR_CODES } from '../../../../lib/errorCodes';
+import { productUpdateSchema } from '../../../../lib/schemas/productSchema';
+import { ZodError } from 'zod';
 
 type RouteParams = {
   params: {
@@ -63,7 +65,16 @@ export async function PUT(
     }
 
     const body = await req.json();
-    const { name, description, price, stock, sku } = body;
+    let validated: any;
+    try {
+      validated = productUpdateSchema.parse(body);
+    } catch (err) {
+      if (err instanceof ZodError) {
+        const details = err.errors.map((e) => ({ field: e.path.join('.'), message: e.message }));
+        return sendError('Validation Error', ERROR_CODES.VALIDATION_ERROR, 400, details);
+      }
+      throw err;
+    }
 
     // Check if product exists
     const existingProduct = await prisma.product.findUnique({
@@ -75,10 +86,8 @@ export async function PUT(
     }
 
     // If SKU is being updated, check uniqueness
-    if (sku && sku !== existingProduct.sku) {
-      const skuExists = await prisma.product.findFirst({
-        where: { sku, id: { not: productId } },
-      });
+    if (validated.sku && validated.sku !== existingProduct.sku) {
+      const skuExists = await prisma.product.findFirst({ where: { sku: validated.sku, id: { not: productId } } });
       if (skuExists) {
         return sendError('SKU already exists', ERROR_CODES.VALIDATION_ERROR, 409);
       }
@@ -88,11 +97,11 @@ export async function PUT(
     const updatedProduct = await prisma.product.update({
       where: { id: productId },
       data: {
-        ...(name && { name }),
-        ...(description !== undefined && { description }),
-        ...(price !== undefined && { price: Number(price) }),
-        ...(stock !== undefined && { stock: Number(stock) }),
-        ...(sku && { sku }),
+        ...(validated.name && { name: validated.name }),
+        ...(validated.description !== undefined && { description: validated.description }),
+        ...(validated.price !== undefined && { price: validated.price }),
+        ...(validated.stock !== undefined && { stock: validated.stock }),
+        ...(validated.sku && { sku: validated.sku }),
       },
       select: {
         id: true,

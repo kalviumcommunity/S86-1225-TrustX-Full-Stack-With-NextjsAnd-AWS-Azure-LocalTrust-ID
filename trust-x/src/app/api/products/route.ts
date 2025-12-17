@@ -8,6 +8,8 @@ import { NextRequest } from 'next/server';
 import { prisma } from '../../../lib/prisma';
 import { sendSuccess, sendError } from '../../../lib/responseHandler';
 import { ERROR_CODES } from '../../../lib/errorCodes';
+import { productCreateSchema } from '../../../lib/schemas/productSchema';
+import { ZodError } from 'zod';
 
 // GET: Retrieve all products with pagination and filtering
 export async function GET(req: NextRequest) {
@@ -82,18 +84,20 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { name, description, price, stock, sku } = body;
-
-    // Validate required fields
-    if (!name || price === undefined || stock === undefined) {
-      return sendError('Name, price, and stock are required', ERROR_CODES.VALIDATION_ERROR, 400);
+    let validated: any;
+    try {
+      validated = productCreateSchema.parse(body);
+    } catch (err) {
+      if (err instanceof ZodError) {
+        const details = err.errors.map((e) => ({ field: e.path.join('.'), message: e.message }));
+        return sendError('Validation Error', ERROR_CODES.VALIDATION_ERROR, 400, details);
+      }
+      throw err;
     }
 
     // Check if SKU is unique (if provided)
-    if (sku) {
-      const existingProduct = await prisma.product.findFirst({
-        where: { sku },
-      });
+    if (validated.sku) {
+      const existingProduct = await prisma.product.findFirst({ where: { sku: validated.sku } });
       if (existingProduct) {
         return sendError('SKU already exists', ERROR_CODES.VALIDATION_ERROR, 409);
       }
@@ -102,11 +106,11 @@ export async function POST(req: NextRequest) {
     // Create product
     const product = await prisma.product.create({
       data: {
-        name,
-        description: description || '',
-        price: Number(price),
-        stock: Number(stock),
-        sku: sku || `SKU-${Date.now()}`,
+        name: validated.name,
+        description: validated.description || '',
+        price: validated.price,
+        stock: validated.stock,
+        sku: validated.sku || `SKU-${Date.now()}`,
       },
       select: {
         id: true,
