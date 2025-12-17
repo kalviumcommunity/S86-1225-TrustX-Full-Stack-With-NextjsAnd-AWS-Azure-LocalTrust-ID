@@ -5,8 +5,10 @@
  * DELETE /api/products/[id] - Delete a product
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '../../../../lib/prisma';
+import { sendSuccess, sendError } from '../../../../lib/responseHandler';
+import { ERROR_CODES } from '../../../../lib/errorCodes';
 
 type RouteParams = {
   params: {
@@ -23,10 +25,7 @@ export async function GET(
     const productId = Number(params.id);
 
     if (isNaN(productId)) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid product ID' },
-        { status: 400 }
-      );
+      return sendError('Invalid product ID', ERROR_CODES.VALIDATION_ERROR, 400);
     }
 
     const product = await prisma.product.findUnique({
@@ -40,23 +39,14 @@ export async function GET(
     });
 
     if (!product) {
-      return NextResponse.json(
-        { success: false, error: 'Product not found' },
-        { status: 404 }
-      );
+      return sendError('Product not found', ERROR_CODES.NOT_FOUND, 404);
     }
 
-    return NextResponse.json(
-      { success: true, data: product },
-      { status: 200 }
-    );
+    return sendSuccess(product, 'Product fetched successfully', 200);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to fetch product';
     console.error('GET /api/products/[id] error:', error);
-    return NextResponse.json(
-      { success: false, error: message },
-      { status: 500 }
-    );
+    return sendError(message, ERROR_CODES.INTERNAL_ERROR, 500, error);
   }
 }
 
@@ -69,10 +59,7 @@ export async function PUT(
     const productId = Number(params.id);
 
     if (isNaN(productId)) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid product ID' },
-        { status: 400 }
-      );
+      return sendError('Invalid product ID', ERROR_CODES.VALIDATION_ERROR, 400);
     }
 
     const body = await req.json();
@@ -84,10 +71,7 @@ export async function PUT(
     });
 
     if (!existingProduct) {
-      return NextResponse.json(
-        { success: false, error: 'Product not found' },
-        { status: 404 }
-      );
+      return sendError('Product not found', ERROR_CODES.NOT_FOUND, 404);
     }
 
     // If SKU is being updated, check uniqueness
@@ -96,10 +80,7 @@ export async function PUT(
         where: { sku, id: { not: productId } },
       });
       if (skuExists) {
-        return NextResponse.json(
-          { success: false, error: 'SKU already exists' },
-          { status: 409 }
-        );
+        return sendError('SKU already exists', ERROR_CODES.VALIDATION_ERROR, 409);
       }
     }
 
@@ -124,21 +105,11 @@ export async function PUT(
       },
     });
 
-    return NextResponse.json(
-      {
-        success: true,
-        message: 'Product updated successfully',
-        data: updatedProduct,
-      },
-      { status: 200 }
-    );
+    return sendSuccess(updatedProduct, 'Product updated successfully', 200);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to update product';
     console.error('PUT /api/products/[id] error:', error);
-    return NextResponse.json(
-      { success: false, error: message },
-      { status: 500 }
-    );
+    return sendError(message, ERROR_CODES.INTERNAL_ERROR, 500, error);
   }
 }
 
@@ -151,10 +122,7 @@ export async function DELETE(
     const productId = Number(params.id);
 
     if (isNaN(productId)) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid product ID' },
-        { status: 400 }
-      );
+      return sendError('Invalid product ID', ERROR_CODES.VALIDATION_ERROR, 400);
     }
 
     // Check if product exists
@@ -163,10 +131,7 @@ export async function DELETE(
     });
 
     if (!product) {
-      return NextResponse.json(
-        { success: false, error: 'Product not found' },
-        { status: 404 }
-      );
+      return sendError('Product not found', ERROR_CODES.NOT_FOUND, 404);
     }
 
     // Delete product
@@ -174,16 +139,10 @@ export async function DELETE(
       where: { id: productId },
     });
 
-    return NextResponse.json(
-      { success: true, message: 'Product deleted successfully' },
-      { status: 200 }
-    );
+    return sendSuccess(null, 'Product deleted successfully', 200);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to delete product';
     console.error('DELETE /api/products/[id] error:', error);
-    return NextResponse.json(
-      { success: false, error: message },
-      { status: 500 }
-    );
+    return sendError(message, ERROR_CODES.INTERNAL_ERROR, 500, error);
   }
 }

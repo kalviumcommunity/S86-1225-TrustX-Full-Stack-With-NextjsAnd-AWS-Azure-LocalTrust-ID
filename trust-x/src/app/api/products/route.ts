@@ -4,8 +4,10 @@
  * POST /api/products - Create a new product
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '../../../lib/prisma';
+import { sendSuccess, sendError } from '../../../lib/responseHandler';
+import { ERROR_CODES } from '../../../lib/errorCodes';
 
 // GET: Retrieve all products with pagination and filtering
 export async function GET(req: NextRequest) {
@@ -56,10 +58,9 @@ export async function GET(req: NextRequest) {
       prisma.product.count({ where: whereClause }),
     ]);
 
-    return NextResponse.json(
+    return sendSuccess(
       {
-        success: true,
-        data: products,
+        items: products,
         pagination: {
           page,
           limit,
@@ -67,15 +68,13 @@ export async function GET(req: NextRequest) {
           totalPages: Math.ceil(total / limit),
         },
       },
-      { status: 200 }
+      'Products fetched successfully',
+      200
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to fetch products';
     console.error('GET /api/products error:', error);
-    return NextResponse.json(
-      { success: false, error: message },
-      { status: 500 }
-    );
+    return sendError(message, ERROR_CODES.INTERNAL_ERROR, 500, error);
   }
 }
 
@@ -87,10 +86,7 @@ export async function POST(req: NextRequest) {
 
     // Validate required fields
     if (!name || price === undefined || stock === undefined) {
-      return NextResponse.json(
-        { success: false, error: 'Name, price, and stock are required' },
-        { status: 400 }
-      );
+      return sendError('Name, price, and stock are required', ERROR_CODES.VALIDATION_ERROR, 400);
     }
 
     // Check if SKU is unique (if provided)
@@ -99,10 +95,7 @@ export async function POST(req: NextRequest) {
         where: { sku },
       });
       if (existingProduct) {
-        return NextResponse.json(
-          { success: false, error: 'SKU already exists' },
-          { status: 409 }
-        );
+        return sendError('SKU already exists', ERROR_CODES.VALIDATION_ERROR, 409);
       }
     }
 
@@ -126,20 +119,10 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    return NextResponse.json(
-      {
-        success: true,
-        message: 'Product created successfully',
-        data: product,
-      },
-      { status: 201 }
-    );
+    return sendSuccess(product, 'Product created successfully', 201);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to create product';
     console.error('POST /api/products error:', error);
-    return NextResponse.json(
-      { success: false, error: message },
-      { status: 500 }
-    );
+    return sendError(message, ERROR_CODES.INTERNAL_ERROR, 500, error);
   }
 }
