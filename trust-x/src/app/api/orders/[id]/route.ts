@@ -9,9 +9,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '../../../../lib/prisma';
 
 type RouteParams = {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 };
 
 // GET: Retrieve a specific order by ID
@@ -20,7 +20,8 @@ export async function GET(
   { params }: RouteParams
 ) {
   try {
-    const orderId = Number(params.id);
+    const { id } = await params;
+    const orderId = Number(id);
 
     if (isNaN(orderId)) {
       return NextResponse.json(
@@ -78,7 +79,8 @@ export async function PATCH(
   { params }: RouteParams
 ) {
   try {
-    const orderId = Number(params.id);
+    const { id } = await params;
+    const orderId = Number(id);
 
     if (isNaN(orderId)) {
       return NextResponse.json(
@@ -148,7 +150,8 @@ export async function DELETE(
   { params }: RouteParams
 ) {
   try {
-    const orderId = Number(params.id);
+    const { id } = await params;
+    const orderId = Number(id);
 
     if (isNaN(orderId)) {
       return NextResponse.json(

@@ -13,6 +13,8 @@
         "format:check": "prettier --check ."
     },
     "dependencies": {
+        "bcrypt": "^6.0.0",
+        "jsonwebtoken": "^9.0.3",
         "next": "^16.0.10",
         "react": "19.2.1",
         "react-dom": "19.2.1",
