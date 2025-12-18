@@ -8,6 +8,7 @@ export default function SignupPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [role, setRole] = useState('USER');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -31,13 +32,13 @@ export default function SignupPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ name, email, password, role }),
       });
 
       const data = await response.json();
 
       if (response.ok && data.success) {
-        setSuccess('Account created successfully! You can now log in.');
+        setSuccess(`Account created successfully as ${role}! You can now log in.`);
         setTimeout(() => {
           router.push('/login');
         }, 2000);
@@ -117,19 +118,19 @@ export default function SignupPage() {
               />
             </div>
             <div>
-              <label htmlFor="confirmPassword" className="sr-only">
-                Confirm Password
+              <label htmlFor="role" className="block text-sm font-medium text-gray-700 mb-1">
+                Account Type
               </label>
-              <input
-                id="confirmPassword"
-                name="confirmPassword"
-                type="password"
-                required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                placeholder="Confirm Password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-              />
+              <select
+                id="role"
+                name="role"
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+              >
+                <option value="USER">Regular User</option>
+                <option value="ADMIN">Administrator</option>
+              </select>
             </div>
           </div>
 
