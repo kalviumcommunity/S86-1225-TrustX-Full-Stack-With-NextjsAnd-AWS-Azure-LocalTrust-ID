@@ -192,3 +192,187 @@ Files
 - `src/app/api/auth/signup/route.ts` — Signup endpoint
 - `src/app/api/auth/login/route.ts` — Login endpoint
 - `src/app/api/users/route.ts` — Protected users endpoint
+- `src/app/api/admin/route.ts` — Admin-only endpoint
+- `src/app/middleware.ts` — Authorization middleware
+
+Authorization Middleware
+========================
+
+This project implements comprehensive authorization middleware for Role-Based Access Control (RBAC) in your Next.js application. The middleware intercepts requests, validates JWT tokens, and enforces role-based permissions.
+
+Authentication vs Authorization
+-------------------------------
+
+| Concept | Description | Example |
+|---------|-------------|---------|
+| Authentication | Confirms who the user is | User logs in with valid credentials |
+| Authorization | Determines what actions they can perform | Only admins can delete users |
+
+User Roles
+----------
+
+The system supports role-based access control with the following roles:
+
+- **USER**: Regular authenticated users
+- **ADMIN**: Administrative users with full access
+
+Middleware Architecture
+-----------------------
+
+```
+Request → Middleware → Route Handler
+    ↓         ↓            ↓
+Validate → Authorize → Process
+   JWT    →   Role    → Response
+```
+
+The middleware:
+
+1. **Intercepts** all `/api/*` requests
+2. **Validates** JWT tokens for protected routes
+3. **Checks** user roles for admin-only routes
+4. **Attaches** user info to request headers
+5. **Allows/Rejects** requests based on permissions
+
+Protected Routes
+----------------
+
+### Admin Routes (`/api/admin/*`)
+- Requires valid JWT token
+- Requires `ADMIN` role
+- Full access to user management and system stats
+
+### User Routes (`/api/users`)
+- Requires valid JWT token
+- Accessible to all authenticated users (`USER` or `ADMIN`)
+- Limited to user-specific operations
+
+### Public Routes
+- `/api/auth/*` - Authentication endpoints (signup/login)
+- No middleware protection required
+
+Testing Authorization
+---------------------
+
+### Admin Access (Success)
+```bash
+curl -X GET http://localhost:3000/api/admin \
+-H "Authorization: Bearer <ADMIN_JWT_TOKEN>"
+```
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Welcome Admin! You have full access.",
+  "data": {
+    "userEmail": "admin@example.com",
+    "userRole": "ADMIN",
+    "stats": {
+      "totalUsers": 5,
+      "adminUsers": 1,
+      "regularUsers": 4
+    },
+    "users": [...]
+  }
+}
+```
+
+### Regular User Access to Admin Route (Denied)
+```bash
+curl -X GET http://localhost:3000/api/admin \
+-H "Authorization: Bearer <USER_JWT_TOKEN>"
+```
+**Response:**
+```json
+{
+  "success": false,
+  "message": "Access denied"
+}
+```
+
+### Authenticated User Access to User Route (Success)
+```bash
+curl -X GET http://localhost:3000/api/users \
+-H "Authorization: Bearer <USER_JWT_TOKEN>"
+```
+**Response:**
+```json
+{
+  "success": true,
+  "message": "User route accessible to authenticated users. Welcome user@example.com!",
+  "data": [...],
+  "userInfo": {
+    "email": "user@example.com",
+    "role": "USER"
+  }
+}
+```
+
+### Unauthenticated Access (Denied)
+```bash
+curl -X GET http://localhost:3000/api/users
+```
+**Response:**
+```json
+{
+  "success": false,
+  "message": "Token missing"
+}
+```
+
+Role-Based Security Features
+----------------------------
+
+### JWT Token Structure
+```json
+{
+  "id": 1,
+  "email": "user@example.com",
+  "role": "ADMIN",
+  "iat": 1734500000,
+  "exp": 1734503600
+}
+```
+
+### Middleware Logic
+- **Token Validation**: Verifies JWT signature and expiration
+- **Role Checking**: Compares user role against required permissions
+- **Header Injection**: Adds user context to downstream handlers
+- **Error Responses**: Clear messages for different failure scenarios
+
+### Least Privilege Principle
+- Users only access necessary resources
+- Admin routes strictly limited to admin users
+- Public routes remain unprotected for accessibility
+
+Extending Roles
+---------------
+
+To add new roles (e.g., `EDITOR`, `MODERATOR`):
+
+1. **Update Database**: Add role to User model enum
+2. **Modify Middleware**: Add role checks in middleware logic
+3. **Create Routes**: Add role-specific protected routes
+4. **Update Documentation**: Document new role permissions
+
+Example:
+```typescript
+// In middleware.ts
+if (pathname.startsWith("/api/editor") && !["ADMIN", "EDITOR"].includes(decoded.role)) {
+  return NextResponse.json({ success: false, message: "Access denied" }, { status: 403 });
+}
+```
+
+Security Best Practices
+-----------------------
+
+- **Token Expiration**: 1-hour expiry prevents long-lived sessions
+- **Role Validation**: Server-side checks prevent client-side bypass
+- **Error Handling**: Generic error messages prevent information leakage
+- **Header Security**: User info attached securely to request headers
+
+Files
+-----
+- `src/app/middleware.ts` — Main authorization middleware
+- `src/app/api/admin/route.ts` — Admin-only protected route
+- `src/app/api/users/route.ts` — User-level protected route

@@ -1,29 +1,18 @@
 /**
  * Users API Route - CRUD Operations
- * GET /api/users - Retrieve all users with pagination
- * POST /api/users - Create a new user
+ * GET /api/users - Retrieve all users with pagination (protected by middleware)
+ * POST /api/users - Create a new user (public for registration)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '../../../lib/prisma';
-import jwt from "jsonwebtoken";
+import { prisma } from '@/lib/prisma';
 
-const JWT_SECRET = process.env.JWT_SECRET || "supersecretkey";
-
-// GET: Retrieve all users with pagination and filtering
+// GET: Retrieve all users with pagination and filtering (protected by middleware)
 export async function GET(req: NextRequest) {
   try {
-    const authHeader = req.headers.get("authorization");
-    const token = authHeader?.split(" ")[1];
-
-    if (!token)
-      return NextResponse.json({ success: false, message: "Token missing" }, { status: 401 });
-
-    try {
-      jwt.verify(token, JWT_SECRET);
-    } catch {
-      return NextResponse.json({ success: false, message: "Invalid or expired token" }, { status: 403 });
-    }
+    // User info is already validated by middleware
+    const userEmail = req.headers.get("x-user-email");
+    const userRole = req.headers.get("x-user-role");
 
     const { searchParams } = new URL(req.url);
     const page = Math.max(1, Number(searchParams.get('page')) || 1);
