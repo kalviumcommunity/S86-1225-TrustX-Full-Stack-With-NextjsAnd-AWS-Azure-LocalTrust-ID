@@ -8,7 +8,7 @@ import { NextRequest } from 'next/server';
 import { prisma } from '../../../lib/prisma';
 import { sendSuccess, sendError } from '../../../lib/responseHandler';
 import { ERROR_CODES } from '../../../lib/errorCodes';
-import { productCreateSchema } from '../../../lib/schemas/productSchema';
+import { productCreateSchema, ProductCreateInput } from '../../../lib/schemas/productSchema';
 import { ZodError } from 'zod';
 
 // GET: Retrieve all products with pagination and filtering
@@ -84,7 +84,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    let validated: any;
+    let validated: ProductCreateInput;
     try {
       validated = productCreateSchema.parse(body);
     } catch (err) {

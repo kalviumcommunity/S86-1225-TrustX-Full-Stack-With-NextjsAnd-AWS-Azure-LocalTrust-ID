@@ -9,9 +9,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '../../../../lib/prisma';
 
 type RouteParams = {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 };
 
 // GET: Retrieve a specific project by ID
@@ -20,7 +20,8 @@ export async function GET(
   { params }: RouteParams
 ) {
   try {
-    const projectId = Number(params.id);
+    const { id } = await params;
+    const projectId = Number(id);
 
     if (isNaN(projectId)) {
       return NextResponse.json(
@@ -66,7 +67,8 @@ export async function PUT(
   { params }: RouteParams
 ) {
   try {
-    const projectId = Number(params.id);
+    const { id } = await params;
+    const projectId = Number(id);
 
     if (isNaN(projectId)) {
       return NextResponse.json(
@@ -131,7 +133,8 @@ export async function DELETE(
   { params }: RouteParams
 ) {
   try {
-    const projectId = Number(params.id);
+    const { id } = await params;
+    const projectId = Number(id);
 
     if (isNaN(projectId)) {
       return NextResponse.json(

@@ -9,13 +9,13 @@ import { NextRequest } from 'next/server';
 import { prisma } from '../../../../lib/prisma';
 import { sendSuccess, sendError } from '../../../../lib/responseHandler';
 import { ERROR_CODES } from '../../../../lib/errorCodes';
-import { productUpdateSchema } from '../../../../lib/schemas/productSchema';
+import { productUpdateSchema, ProductUpdateInput } from '../../../../lib/schemas/productSchema';
 import { ZodError } from 'zod';
 
 type RouteParams = {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 };
 
 // GET: Retrieve a specific product by ID
@@ -24,7 +24,8 @@ export async function GET(
   { params }: RouteParams
 ) {
   try {
-    const productId = Number(params.id);
+    const { id } = await params;
+    const productId = Number(id);
 
     if (isNaN(productId)) {
       return sendError('Invalid product ID', ERROR_CODES.VALIDATION_ERROR, 400);
@@ -58,14 +59,15 @@ export async function PUT(
   { params }: RouteParams
 ) {
   try {
-    const productId = Number(params.id);
+    const { id } = await params;
+    const productId = Number(id);
 
     if (isNaN(productId)) {
       return sendError('Invalid product ID', ERROR_CODES.VALIDATION_ERROR, 400);
     }
 
     const body = await req.json();
-    let validated: any;
+    let validated: ProductUpdateInput;
     try {
       validated = productUpdateSchema.parse(body);
     } catch (err) {
@@ -128,7 +130,8 @@ export async function DELETE(
   { params }: RouteParams
 ) {
   try {
-    const productId = Number(params.id);
+    const { id } = await params;
+    const productId = Number(id);
 
     if (isNaN(productId)) {
       return sendError('Invalid product ID', ERROR_CODES.VALIDATION_ERROR, 400);

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 export const sendSuccess = (
-  data: any,
+  data: unknown,
   message = 'Success',
   status = 200
 ) => {
@@ -20,7 +20,7 @@ export const sendError = (
   message = 'Something went wrong',
   code = 'INTERNAL_ERROR',
   status = 500,
-  details?: any
+  details?: unknown
 ) => {
   return NextResponse.json(
     {
