@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { handleError } from "@/lib/errorHandler";
+import { cacheService } from "@/lib/cache";
 
 export async function PATCH(req: Request) {
   try {
@@ -33,6 +34,12 @@ export async function PATCH(req: Request) {
         updatedAt: true,
       },
     });
+
+    // Invalidate all user list caches after updating a user
+    const invalidatedCount = await cacheService.delPattern("users:list:*");
+    if (invalidatedCount > 0) {
+      console.log(`Invalidated ${invalidatedCount} user list cache entries`);
+    }
 
     return NextResponse.json({
       success: true,

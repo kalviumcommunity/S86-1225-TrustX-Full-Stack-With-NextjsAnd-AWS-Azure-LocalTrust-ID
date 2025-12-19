@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { cacheService } from '@/lib/cache';
 
 // GET: Retrieve all users with pagination and filtering (protected by middleware)
 export async function GET(req: NextRequest) {
@@ -18,6 +19,18 @@ export async function GET(req: NextRequest) {
     const page = Math.max(1, Number(searchParams.get('page')) || 1);
     const limit = Math.min(100, Number(searchParams.get('limit')) || 10);
     const search = searchParams.get('search') || '';
+
+    // Create cache key that includes pagination and search parameters
+    const cacheKey = `users:list:page=${page}:limit=${limit}:search=${search}`;
+
+    // Try to get data from cache first
+    const cachedData = await cacheService.get(cacheKey);
+    if (cachedData) {
+      console.log("Cache Hit - Users list");
+      return NextResponse.json(cachedData);
+    }
+
+    console.log("Cache Miss - Fetching users from DB");
 
     // Calculate skip for pagination
     const skip = (page - 1) * limit;
@@ -50,19 +63,21 @@ export async function GET(req: NextRequest) {
       prisma.user.count({ where: whereClause }),
     ]);
 
-    return NextResponse.json(
-      {
-        success: true,
-        data: users,
-        pagination: {
-          page,
-          limit,
-          total,
-          totalPages: Math.ceil(total / limit),
-        },
+    const responseData = {
+      success: true,
+      data: users,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
       },
-      { status: 200 }
-    );
+    };
+
+    // Cache the response for 60 seconds (TTL)
+    await cacheService.set(cacheKey, responseData, 60);
+
+    return NextResponse.json(responseData, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to fetch users';
     console.error('GET /api/users error:', error);
@@ -114,6 +129,12 @@ export async function POST(req: NextRequest) {
         createdAt: true,
       },
     });
+
+    // Invalidate all user list caches after creating a new user
+    const invalidatedCount = await cacheService.delPattern("users:list:*");
+    if (invalidatedCount > 0) {
+      console.log(`Invalidated ${invalidatedCount} user list cache entries`);
+    }
 
     return NextResponse.json(
       {
