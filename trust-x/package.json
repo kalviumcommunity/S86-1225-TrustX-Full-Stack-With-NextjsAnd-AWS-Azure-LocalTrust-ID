@@ -10,10 +10,12 @@
         "prepare": "husky install",
         "lint:fix": "eslint . --fix",
         "format": "prettier --write .",
-        "format:check": "prettier --check ."
+        "format:check": "prettier --check .",
+        "test:cache": "node cache-test.js"
     },
     "dependencies": {
         "bcrypt": "^6.0.0",
+        "ioredis": "^5.8.2",
         "jsonwebtoken": "^9.0.3",
         "next": "^16.0.10",
         "react": "19.2.1",
