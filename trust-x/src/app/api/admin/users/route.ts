@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { handleError } from "@/lib/errorHandler";
 
 export async function PATCH(req: Request) {
   try {
@@ -39,11 +40,6 @@ export async function PATCH(req: Request) {
       data: updatedUser
     });
   } catch (error) {
-    console.error("Error updating user role:", error);
-    return NextResponse.json({
-      success: false,
-      message: "Failed to update user role",
-      error: error instanceof Error ? error.message : "Unknown error"
-    }, { status: 500 });
+    return handleError(error, "PATCH /api/admin/users");
   }
 }
