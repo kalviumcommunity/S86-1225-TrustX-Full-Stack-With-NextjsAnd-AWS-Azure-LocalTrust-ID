@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcrypt";
 import { prisma } from "../../../../lib/prisma";
+import { sendWelcomeEmail } from "../../../../lib/emailService";
+import { logger } from "../../../../lib/logger";
 
 export async function POST(req: Request) {
   try {
@@ -24,6 +26,19 @@ export async function POST(req: Request) {
     const newUser = await prisma.user.create({
       data: { name, email, password: hashedPassword, role },
     });
+
+    // Send welcome email asynchronously (don't block response)
+    sendWelcomeEmail(email, name)
+      .then((result) => {
+        if (result.success) {
+          logger.info(`Welcome email sent to ${email}`, { messageId: result.messageId });
+        } else {
+          logger.warn(`Failed to send welcome email to ${email}`, { error: result.error });
+        }
+      })
+      .catch((error) => {
+        logger.error(`Error sending welcome email to ${email}`, { error: error.message });
+      });
 
     return NextResponse.json({ success: true, message: "Signup successful", user: newUser });
   } catch (error) {
