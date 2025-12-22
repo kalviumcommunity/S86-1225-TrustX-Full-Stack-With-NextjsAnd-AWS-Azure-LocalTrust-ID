@@ -871,3 +871,273 @@ Reflection: Cache as Short-Term Memory
 - Highly personalized responses
 - Low-traffic applications (minimal benefit)
 - Complex invalidation logic costs more than gains
+
+File Upload API with AWS S3
+===========================
+
+This project implements secure file uploads using pre-signed URLs with AWS S3, providing scalable and secure file storage without exposing credentials.
+
+Why Pre-Signed URLs?
+--------------------
+
+Direct uploads through backend can overload servers and expose credentials. Pre-signed URLs offer three major benefits:
+
+**Advantage** | **Description**
+-------------|---------------
+Security | Credentials stay hidden; uploads go directly to cloud
+Scalability | Backend handles only URL generation, not large file streams
+Performance | Upload latency decreases since files bypass the app server
+
+Implementation Overview
+-----------------------
+
+### Architecture Flow
+```
+1. Client requests upload URL → Backend generates pre-signed URL
+2. Client uploads file directly → AWS S3 using pre-signed URL
+3. Client notifies backend → File metadata stored in database
+4. File becomes accessible → Via public URL or signed access
+```
+
+### AWS S3 Configuration
+
+**Environment Variables** (add to `.env`):
+```
+AWS_ACCESS_KEY_ID=your-access-key
+AWS_SECRET_ACCESS_KEY=your-secret-key
+AWS_REGION=ap-south-1
+AWS_BUCKET_NAME=your-bucket-name
+```
+
+**Dependencies**:
+- `@aws-sdk/client-s3` — AWS S3 client
+- `@aws-sdk/s3-request-presigner` — Pre-signed URL generation
+
+### Database Schema
+
+**File Model**:
+```prisma
+model File {
+  id        Int       @id @default(autoincrement())
+  name      String
+  url       String
+  size      Int?
+  type      String
+  userId    Int?
+  user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([createdAt])
+}
+```
+
+API Endpoints
+-------------
+
+### POST /api/upload
+Generates a pre-signed URL for file upload.
+
+**Request Body**:
+```json
+{
+  "filename": "document.pdf",
+  "fileType": "application/pdf",
+  "fileSize": 1024000
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "uploadURL": "https://presigned-s3-url...",
+  "fileKey": "1234567890-abc123-document.pdf"
+}
+```
+
+**Validation Rules**:
+- File types: JPEG, PNG, GIF, WebP, PDF
+- Max size: 10MB
+- URL expiry: 5 minutes
+
+### POST /api/files
+Stores uploaded file metadata in database.
+
+**Request Body**:
+```json
+{
+  "fileName": "document.pdf",
+  "fileKey": "1234567890-abc123-document.pdf",
+  "fileSize": 1024000,
+  "fileType": "application/pdf"
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "file": {
+    "id": 1,
+    "name": "document.pdf",
+    "url": "https://bucket.s3.region.amazonaws.com/1234567890-abc123-document.pdf",
+    "size": 1024000,
+    "type": "application/pdf",
+    "userId": 1,
+    "createdAt": "2025-12-22T08:00:00Z"
+  }
+}
+```
+
+### GET /api/files
+Retrieves user's uploaded files.
+
+**Response**:
+```json
+{
+  "success": true,
+  "files": [
+    {
+      "id": 1,
+      "name": "document.pdf",
+      "url": "https://bucket.s3.region.amazonaws.com/...",
+      "size": 1024000,
+      "type": "application/pdf",
+      "createdAt": "2025-12-22T08:00:00Z"
+    }
+  ]
+}
+```
+
+Frontend Implementation
+-----------------------
+
+### Upload Flow Example
+
+```javascript
+async function uploadFile(file) {
+  // Step 1: Get pre-signed URL
+  const res = await fetch("/api/upload", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      filename: file.name,
+      fileType: file.type,
+      fileSize: file.size
+    }),
+  });
+
+  const { uploadURL, fileKey } = await res.json();
+
+  // Step 2: Upload file directly to S3
+  await fetch(uploadURL, {
+    method: "PUT",
+    headers: { "Content-Type": file.type },
+    body: file,
+  });
+
+  // Step 3: Store metadata
+  await fetch("/api/files", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      fileName: file.name,
+      fileKey: fileKey,
+      fileSize: file.size,
+      fileType: file.type,
+    }),
+  });
+
+  console.log("File uploaded successfully!");
+}
+```
+
+Testing the Upload Flow
+------------------------
+
+1. **Generate Pre-signed URL**:
+   ```bash
+   curl -X POST http://localhost:3000/api/upload \
+     -H "Content-Type: application/json" \
+     -d '{"filename":"test.pdf","fileType":"application/pdf","fileSize":1024}'
+   ```
+
+2. **Upload File Using URL**:
+   ```bash
+   curl -X PUT -T test.pdf "PRESIGNED_URL_FROM_STEP_1"
+   ```
+
+3. **Store File Metadata**:
+   ```bash
+   curl -X POST http://localhost:3000/api/files \
+     -H "Content-Type: application/json" \
+     -d '{"fileName":"test.pdf","fileKey":"KEY_FROM_RESPONSE","fileSize":1024,"fileType":"application/pdf"}'
+   ```
+
+4. **Verify Upload**: Open the file URL in browser to confirm upload success.
+
+Security Considerations
+-----------------------
+
+### File Validation
+- **Type Checking**: Only allow specific MIME types (images, PDFs)
+- **Size Limits**: Maximum 10MB per file
+- **Name Sanitization**: Generate unique filenames to prevent conflicts
+
+### URL Security
+- **Short Expiry**: URLs expire in 5 minutes
+- **Single Use**: Each URL can only be used once
+- **Scoped Permissions**: PUT-only access to specific object
+
+### Access Control
+- **Public vs Private**: Current implementation uses public bucket
+- **User Association**: Files linked to uploading user
+- **Audit Trail**: All uploads logged with timestamps
+
+### AWS S3 Best Practices
+- **Bucket Policies**: Restrict access to specific origins
+- **CORS Configuration**: Allow uploads from your domain only
+- **Lifecycle Policies**: Auto-delete old/unused files
+
+Files and Code Structure
+------------------------
+
+**Backend Files**:
+- `src/app/api/upload/route.ts` — Pre-signed URL generation
+- `src/app/api/files/route.ts` — File metadata management
+- `prisma/schema.prisma` — File model definition
+
+**Frontend Files**:
+- `src/app/upload/page.tsx` — Upload interface and demo
+
+**Configuration Files**:
+- `.env` — AWS credentials and bucket settings
+
+Reflection: Security Through Obscurity vs. Proper Security
+----------------------------------------------------------
+
+"A great upload system isn't just fast — it's safe, scalable, and short-lived where needed. Pre-signed URLs give you the power of the cloud without giving away your keys."
+
+**Key Security Insights**:
+- **Credential Isolation**: Never expose AWS keys to client
+- **Time-Bound Access**: Short-lived URLs reduce attack window
+- **Direct Cloud Upload**: Bypasses server bandwidth limits
+- **Validation Layers**: Multiple checks prevent malicious uploads
+
+**Trade-offs Considered**:
+- **Public vs Private Files**: Public access simplifies implementation but reduces control
+- **Cost vs Security**: Private files require signed URLs for access (additional complexity)
+- **Scalability vs Control**: Direct S3 uploads scale infinitely but complicate access management
+
+**Lifecycle Management Benefits**:
+- **Cost Optimization**: Auto-delete unused files prevents storage bloat
+- **Compliance**: Meet data retention requirements automatically
+- **Performance**: Clean up reduces bucket listing times
+
+**Future Enhancements**:
+- Implement private file access with signed URLs
+- Add file versioning and rollback capabilities
+- Integrate with AWS CloudFront for global CDN distribution
+- Add image processing and optimization pipeline

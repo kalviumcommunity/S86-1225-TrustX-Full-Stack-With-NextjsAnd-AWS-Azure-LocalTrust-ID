@@ -3,8 +3,8 @@ import { z } from 'zod';
 export const productCreateSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   description: z.string().optional(),
-  price: z.coerce.number({ invalid_type_error: 'Price must be a number' }).nonnegative(),
-  stock: z.coerce.number({ invalid_type_error: 'Stock must be a number' }).int().nonnegative(),
+  price: z.coerce.number().nonnegative(),
+  stock: z.coerce.number().int().nonnegative(),
   sku: z.string().optional(),
 });
 

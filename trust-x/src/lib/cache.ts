@@ -19,7 +19,7 @@ export class CacheService {
   /**
    * Set data in cache with TTL
    */
-  async set(key: string, data: any, ttlSeconds: number = 60): Promise<void> {
+  async set(key: string, data: unknown, ttlSeconds: number = 60): Promise<void> {
     try {
       await this.redis.set(key, JSON.stringify(data), "EX", ttlSeconds);
     } catch (error) {

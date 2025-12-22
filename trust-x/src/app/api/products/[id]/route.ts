@@ -35,8 +35,7 @@ export async function GET(
       where: { id: productId },
       include: {
         inventory: {
-          select: { id: true, warehouseLocation: true, quantity: true },
-          take: 5,
+          select: { id: true, warehouseLocation: true, reorderLevel: true },
         },
       },
     });
@@ -72,7 +71,7 @@ export async function PUT(
       validated = productUpdateSchema.parse(body);
     } catch (err) {
       if (err instanceof ZodError) {
-        const details = err.errors.map((e) => ({ field: e.path.join('.'), message: e.message }));
+        const details = err.issues.map((e) => ({ field: e.path.join('.'), message: e.message }));
         return sendError('Validation Error', ERROR_CODES.VALIDATION_ERROR, 400, details);
       }
       throw err;

@@ -5,6 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import bcrypt from "bcrypt";
 import { prisma } from '@/lib/prisma';
 import { cacheService } from '@/lib/cache';
 
@@ -12,8 +13,8 @@ import { cacheService } from '@/lib/cache';
 export async function GET(req: NextRequest) {
   try {
     // User info is already validated by middleware
-    const userEmail = req.headers.get("x-user-email");
-    const userRole = req.headers.get("x-user-role");
+    // const userEmail = req.headers.get("x-user-email");
+    // const userRole = req.headers.get("x-user-role");
 
     const { searchParams } = new URL(req.url);
     const page = Math.max(1, Number(searchParams.get('page')) || 1);
@@ -92,12 +93,12 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { name, email, role } = body;
+    const { name, email, password, role } = body;
 
     // Validate required fields
-    if (!name || !email) {
+    if (!name || !email || !password) {
       return NextResponse.json(
-        { success: false, error: 'Name and email are required' },
+        { success: false, error: 'Name, email, and password are required' },
         { status: 400 }
       );
     }
@@ -115,10 +116,12 @@ export async function POST(req: NextRequest) {
     }
 
     // Create user
+    const hashedPassword = await bcrypt.hash(password, 10);
     const user = await prisma.user.create({
       data: {
         name,
         email,
+        password: hashedPassword,
         role: role || 'USER',
       },
       select: {

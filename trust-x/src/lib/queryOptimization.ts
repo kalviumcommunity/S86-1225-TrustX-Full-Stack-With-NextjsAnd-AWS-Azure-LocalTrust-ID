@@ -300,8 +300,8 @@ export async function searchProducts(keyword: string, limit: number = 10) {
   const products = await prisma.product.findMany({
     where: {
       OR: [
-        { name: { contains: keyword, mode: 'insensitive' } },
-        { description: { contains: keyword, mode: 'insensitive' } },
+        { name: { contains: keyword } },
+        { description: { contains: keyword } },
       ],
     },
     select: {

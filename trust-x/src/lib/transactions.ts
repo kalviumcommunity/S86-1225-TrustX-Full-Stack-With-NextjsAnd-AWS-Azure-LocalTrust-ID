@@ -113,6 +113,7 @@ export async function createUserWithProjectsTransaction(
         data: {
           name: userData.name,
           email: userData.email,
+          password: 'defaultpassword123', // Default password for transaction demo
           role: 'USER',
         },
       });

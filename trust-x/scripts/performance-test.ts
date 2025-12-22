@@ -61,9 +61,9 @@ async function seedData(): Promise<{
     // Create users
     const users = await prisma.user.createMany({
       data: [
-        { name: 'Alice', email: 'alice@test.com' },
-        { name: 'Bob', email: 'bob@test.com' },
-        { name: 'Carol', email: 'carol@test.com' },
+        { name: 'Alice', email: 'alice@test.com', password: 'password123' },
+        { name: 'Bob', email: 'bob@test.com', password: 'password123' },
+        { name: 'Carol', email: 'carol@test.com', password: 'password123' },
       ],
     });
     log(`✓ Created ${users.count} users`, 'green');

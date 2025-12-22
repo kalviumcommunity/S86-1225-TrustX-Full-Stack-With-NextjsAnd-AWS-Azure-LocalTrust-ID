@@ -19,6 +19,7 @@ model User {
   projects  Project[]
   orders    Order[]
   payments  Payment[]
+  files     File[]
 
   // Indexes for frequently queried fields
   @@index([email])
@@ -160,4 +161,21 @@ model Payment {
   @@index([userId])
   @@index([status])
   @@index([transactionId])
+}
+
+model File {
+  id        Int       @id @default(autoincrement())
+  name      String
+  url       String
+  size      Int?
+  type      String
+  userId    Int?
+  user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // Indexes for frequently queried fields
+  @@index([userId])
+  @@index([createdAt])
 }
