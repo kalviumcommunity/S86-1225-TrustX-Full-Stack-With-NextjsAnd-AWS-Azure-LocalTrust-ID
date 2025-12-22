@@ -17,7 +17,7 @@ export function middleware(req: NextRequest) {
     }
 
     try {
-      const decoded: any = jwt.verify(token, JWT_SECRET);
+      const decoded = jwt.verify(token, JWT_SECRET) as { id: number; email: string; role: string };
 
       // Role-based access control
       if (pathname.startsWith("/api/admin") && decoded.role !== "ADMIN") {
@@ -28,7 +28,7 @@ export function middleware(req: NextRequest) {
       const requestHeaders = new Headers(req.headers);
       requestHeaders.set("x-user-email", decoded.email);
       requestHeaders.set("x-user-role", decoded.role);
-      requestHeaders.set("x-user-id", decoded.id);
+      requestHeaders.set("x-user-id", decoded.id.toString());
 
       return NextResponse.next({ request: { headers: requestHeaders } });
     } catch {

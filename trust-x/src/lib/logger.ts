@@ -1,8 +1,8 @@
 export const logger = {
-  info: (message: string, meta?: any) => {
+  info: (message: string, meta?: unknown) => {
     console.log(JSON.stringify({ level: "info", message, meta, timestamp: new Date() }));
   },
-  error: (message: string, meta?: any) => {
+  error: (message: string, meta?: unknown) => {
     console.error(JSON.stringify({ level: "error", message, meta, timestamp: new Date() }));
   },
 };

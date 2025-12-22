@@ -78,7 +78,7 @@ export async function PUT(
     }
 
     const body = await req.json();
-    const { title, description, status } = body;
+    const { title, status } = body;
 
     // Check if project exists
     const existingProject = await prisma.project.findUnique({
@@ -97,13 +97,11 @@ export async function PUT(
       where: { id: projectId },
       data: {
         ...(title && { title }),
-        ...(description !== undefined && { description }),
         ...(status && { status }),
       },
       select: {
         id: true,
         title: true,
-        description: true,
         status: true,
         updatedAt: true,
       },

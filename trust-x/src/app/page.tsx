@@ -5,28 +5,17 @@ import { useState, useEffect } from 'react';
 
 export default function Home() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check if user is logged in
+    // Check if user is logged in after component mounts (client-side only)
     const token = localStorage.getItem('token');
-    if (token) {
-      setIsLoggedIn(true);
-      // You could decode the token or fetch user info here
-    }
-    setLoading(false);
+    setIsLoggedIn(!!token);
   }, []);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
     setIsLoggedIn(false);
-    setUser(null);
   };
-
-  if (loading) {
-    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
-  }
 
   return (
     <main className="min-h-screen bg-gray-50">

@@ -31,7 +31,6 @@ export async function GET(req: NextRequest) {
         select: {
           id: true,
           title: true,
-          description: true,
           status: true,
           userId: true,
           createdAt: true,
@@ -70,7 +69,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { title, description, userId } = body;
+    const { title, userId } = body;
 
     // Validate required fields
     if (!title || !userId) {
@@ -96,14 +95,12 @@ export async function POST(req: NextRequest) {
     const project = await prisma.project.create({
       data: {
         title,
-        description: description || '',
         userId: Number(userId),
         status: 'active',
       },
       select: {
         id: true,
         title: true,
-        description: true,
         status: true,
         userId: true,
         createdAt: true,

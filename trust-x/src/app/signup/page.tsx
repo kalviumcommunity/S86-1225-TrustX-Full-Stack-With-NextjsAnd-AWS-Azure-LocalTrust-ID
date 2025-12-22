@@ -7,7 +7,6 @@ export default function SignupPage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [role, setRole] = useState('USER');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -19,12 +18,6 @@ export default function SignupPage() {
     setLoading(true);
     setError('');
     setSuccess('');
-
-    if (password !== confirmPassword) {
-      setError('Passwords do not match');
-      setLoading(false);
-      return;
-    }
 
     try {
       const response = await fetch('/api/auth/signup', {
@@ -45,7 +38,7 @@ export default function SignupPage() {
       } else {
         setError(data.message || 'Signup failed');
       }
-    } catch (err) {
+    } catch {
       setError('Network error. Please try again.');
     } finally {
       setLoading(false);

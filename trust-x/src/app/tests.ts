@@ -82,9 +82,9 @@ async function seedTestData(): Promise<void> {
     // Create test users
     const users = await prisma.user.createMany({
       data: [
-        { name: 'Alice Johnson', email: 'alice@example.com', role: 'USER' },
-        { name: 'Bob Smith', email: 'bob@example.com', role: 'ADMIN' },
-        { name: 'Carol Davis', email: 'carol@example.com', role: 'USER' },
+        { name: 'Alice Johnson', email: 'alice@example.com', password: 'password123', role: 'USER' },
+        { name: 'Bob Smith', email: 'bob@example.com', password: 'password123', role: 'ADMIN' },
+        { name: 'Carol Davis', email: 'carol@example.com', password: 'password123', role: 'USER' },
       ],
     });
     console.log(`✓ Created ${users.count} users`);
