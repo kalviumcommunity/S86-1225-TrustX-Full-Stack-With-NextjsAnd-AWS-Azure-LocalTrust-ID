@@ -1141,3 +1141,73 @@ Reflection: Security Through Obscurity vs. Proper Security
 - Add file versioning and rollback capabilities
 - Integrate with AWS CloudFront for global CDN distribution
 - Add image processing and optimization pipeline
+
+Routing
+-------
+
+This project uses the Next.js App Router (file-based routing) under the `src/app` folder. Key routes implemented for the lesson:
+
+- Public routes:
+  - `/` → Home (`src/app/page.tsx`)
+  - `/login` → Login page (`src/app/login/page.tsx`)
+
+- Protected routes (middleware checks a JWT stored in cookie `token`):
+  - `/dashboard` → Protected dashboard (`src/app/dashboard/page.tsx`)
+  - `/users` → Users list (`src/app/users/page.tsx`)
+  - `/users/[id]` → Dynamic user profile (`src/app/users/[id]/page.tsx`)
+
+Middleware for protection is implemented in `src/app/middleware.ts`. It protects API admin endpoints by verifying an Authorization header, and protects client pages under `/dashboard` and `/users` by checking the `token` cookie and redirecting unauthenticated users to `/login`.
+
+Example middleware behavior:
+
+```ts
+// src/app/middleware.ts
+if (pathname.startsWith('/dashboard') || pathname.startsWith('/users')) {
+  const token = req.cookies.get('token')?.value;
+  if (!token) return NextResponse.redirect(new URL('/login', req.url));
+  jwt.verify(token, process.env.JWT_SECRET);
+}
+```
+
+Navigation is added in `src/app/layout.tsx` with links to Home, Login, Dashboard and Users. A custom 404 page is available at `src/app/not-found.tsx`.
+
+Dynamic route example:
+
+```tsx
+// src/app/users/[id]/page.tsx
+export default function UserProfile({ params }) {
+  const { id } = params;
+  return <div>User ID: {id}</div>;
+}
+```
+
+Testing & Tryout
+-----------------
+
+1. Start the dev server:
+
+```bash
+npm run dev
+```
+
+2. Visit public pages:
+
+```text
+http://localhost:3000/
+http://localhost:3000/login
+```
+
+3. To open protected pages, set a cookie `token` (mock JWT or real token from auth) and visit:
+
+```text
+http://localhost:3000/dashboard
+http://localhost:3000/users
+http://localhost:3000/users/1
+```
+
+Reflection
+----------
+
+Good routing design makes navigation intuitive and improves SEO. Dynamic routes (like `/users/[id]`) enable parameterized content and breadcrumb navigation improves discoverability and user context. The middleware approach separates auth concerns from pages and APIs and provides a single place to update access rules.
+
+Pro Tip: Include server-side rendering or server components for SEO-critical pages and add structured data (schema.org) for better search engine results.
