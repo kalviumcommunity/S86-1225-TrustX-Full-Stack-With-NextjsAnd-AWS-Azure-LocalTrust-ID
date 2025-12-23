@@ -198,6 +198,43 @@ Files
 Authorization Middleware
 ========================
 
+Component Architecture
+======================
+
+This project includes a reusable component architecture to provide consistent layout, navigation, and UI primitives across pages.
+
+Files
+- [src/components/layout/Header.tsx](src/components/layout/Header.tsx) — top navigation header (`Header`)
+- [src/components/layout/Sidebar.tsx](src/components/layout/Sidebar.tsx) — contextual sidebar navigation (`Sidebar`)
+- [src/components/layout/LayoutWrapper.tsx](src/components/layout/LayoutWrapper.tsx) — page layout wrapper combining header + sidebar (`LayoutWrapper`)
+- [src/components/ui/Button.tsx](src/components/ui/Button.tsx) — reusable button primitive (`Button`)
+- [src/components/index.ts](src/components/index.ts) — barrel exports for easy imports
+
+Usage
+- Wrap your pages with the shared layout by importing `LayoutWrapper` from the components barrel:
+
+```tsx
+import { LayoutWrapper } from '@/components';
+
+export default function Page() {
+  return (
+    <LayoutWrapper>
+      <div>Page content</div>
+    </LayoutWrapper>
+  );
+}
+```
+
+Props & Accessibility
+- `Button` accepts standard button attributes and a `variant` prop (`primary` | `secondary`). It includes focus ring styles for keyboard navigation.
+- Shared layout components centralize ARIA/keyboard handling and color choices for consistent accessibility across pages.
+
+Reflection
+- Reusability: Updating a shared component updates all pages that consume it.
+- Maintainability: Clear folder structure (`components/layout`, `components/ui`) makes onboarding and extending easier.
+- Scalability: Barrel exports enable consistent imports and simplify refactors.
+
+
 This project implements comprehensive authorization middleware for Role-Based Access Control (RBAC) in your Next.js application. The middleware intercepts requests, validates JWT tokens, and enforces role-based permissions.
 
 Authentication vs Authorization
