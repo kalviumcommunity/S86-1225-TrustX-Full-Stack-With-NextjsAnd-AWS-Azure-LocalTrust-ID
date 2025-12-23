@@ -234,6 +234,30 @@ Reflection
 - Maintainability: Clear folder structure (`components/layout`, `components/ui`) makes onboarding and extending easier.
 - Scalability: Barrel exports enable consistent imports and simplify refactors.
 
+Context & Hooks (State Management)
+---------------------------------
+
+This project now includes global state management using React Context and custom hooks.
+
+Files
+- [src/context/AuthContext.tsx](src/context/AuthContext.tsx) — `AuthProvider` and `useAuthContext` (handles `user`, `login`, `logout`, persisted to `localStorage`).
+- [src/context/UIContext.tsx](src/context/UIContext.tsx) — `UIProvider` and `useUIContext` (handles `theme`, `toggleTheme`, `sidebarOpen`, `toggleSidebar`, persisted theme).
+- [src/hooks/useAuth.ts](src/hooks/useAuth.ts) — `useAuth()` wrapper returning `{ isAuthenticated, user, login, logout }`.
+- [src/hooks/useUI.ts](src/hooks/useUI.ts) — `useUI()` wrapper returning `{ theme, toggleTheme, sidebarOpen, toggleSidebar }`.
+
+Usage
+- Providers are mounted in [src/app/layout.tsx](src/app/layout.tsx): `AuthProvider` → `UIProvider` → app layout.
+- Example demo page: [src/app/page.tsx](src/app/page.tsx) demonstrates login/logout, theme toggling, and sidebar state.
+
+Design notes
+- Keep context logic minimal and expose simple hooks for components.
+- Persisted values use `localStorage` with try/catch for SSR safety.
+
+Reflection
+- Benefits: reduces prop drilling, centralizes auth and UI concerns, and simplifies cross-cutting features (theme, auth gates).
+- Performance: avoid heavy state objects directly in context; use reducers or split contexts for complex apps.
+
+
 
 This project implements comprehensive authorization middleware for Role-Based Access Control (RBAC) in your Next.js application. The middleware intercepts requests, validates JWT tokens, and enforces role-based permissions.
 

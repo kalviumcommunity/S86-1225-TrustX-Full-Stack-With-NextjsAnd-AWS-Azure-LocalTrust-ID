@@ -3,6 +3,8 @@ import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import "./globals.css";
 import { LayoutWrapper } from "@/components";
+import { AuthProvider } from "@/context/AuthContext";
+import { UIProvider } from "@/context/UIContext";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -27,12 +29,16 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <LayoutWrapper>
-          {children}
-          <footer className="border-t mt-8 py-6 text-center text-sm text-gray-500">
-            © {new Date().getFullYear()} TrustX
-          </footer>
-        </LayoutWrapper>
+        <AuthProvider>
+          <UIProvider>
+            <LayoutWrapper>
+              {children}
+              <footer className="border-t mt-8 py-6 text-center text-sm text-gray-500">
+                © {new Date().getFullYear()} TrustX
+              </footer>
+            </LayoutWrapper>
+          </UIProvider>
+        </AuthProvider>
       </body>
     </html>
   );
