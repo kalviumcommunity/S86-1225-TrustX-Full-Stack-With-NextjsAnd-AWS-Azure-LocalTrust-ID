@@ -766,33 +766,24 @@ export async function POST(req: NextRequest) {
     data: user
   });
 }
-```
 
-TTL and Cache Policies
 ----------------------
 
 ### Time-To-Live (TTL) Settings
 
 | Data Type | TTL | Reason |
-|-----------|-----|--------|
 | User Lists | 60 seconds | User data changes frequently |
-| Product Lists | 300 seconds | Product data more stable |
 | Static Config | 3600 seconds | Rarely changes |
-
 ### Cache Key Patterns
-
 ```
 users:list:page=1:limit=10:search=
 users:list:page=2:limit=10:search=john
 products:list:category=electronics:page=1
 user:profile:123
-```
 
-Cache Invalidation Strategy
 ---------------------------
 
 ### Automatic Invalidation
-- **TTL Expiration**: Cache entries automatically expire
 - **Pattern Deletion**: Use wildcards to clear related caches
 
 ### Manual Invalidation Triggers
