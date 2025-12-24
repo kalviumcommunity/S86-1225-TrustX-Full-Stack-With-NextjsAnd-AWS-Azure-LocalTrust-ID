@@ -398,6 +398,28 @@ Role-Based Security Features
 ### Middleware Logic
 - **Token Validation**: Verifies JWT signature and expiration
 - **Role Checking**: Compares user role against required permissions
+
+Forms: React Hook Form + Zod
+----------------------------
+
+This project uses React Hook Form for lightweight form state management and Zod for schema validation on client-side forms. Use `@hookform/resolvers` to connect Zod schemas to React Hook Form.
+
+Install locally in the `trust-x` app directory:
+
+```bash
+cd trust-x
+npm install react-hook-form zod @hookform/resolvers
+```
+
+Example files added:
+- `src/components/FormInput.tsx` — reusable input component that accepts `register` and displays validation errors.
+- `src/app/signup/page.tsx` — Signup form implemented with React Hook Form + Zod and posts to `/api/auth/signup`.
+- `src/app/contact/page.tsx` — Contact form demonstrating reuse of `FormInput` and schema-based validation.
+
+Notes:
+- Keep labels associated with inputs and use `aria-invalid` for accessibility.
+- Validation schemas live next to usage in these examples; you can extract schemas to `src/lib/schemas` for reuse server-side.
+
 - **Header Injection**: Adds user context to downstream handlers
 - **Error Responses**: Clear messages for different failure scenarios
 
