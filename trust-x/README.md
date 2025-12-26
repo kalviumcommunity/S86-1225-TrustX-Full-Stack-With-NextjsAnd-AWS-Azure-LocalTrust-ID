@@ -381,8 +381,51 @@ curl -X GET http://localhost:3000/api/users
 }
 ```
 
+Global API Response Handler
+===========================
+
+This project uses a centralized response handler to ensure all API routes return a consistent envelope.
+
 Role-Based Security Features
 ----------------------------
+Feedback UI — Toasts, Modals, Loaders
+-------------------------------------
+
+This project includes accessible feedback layers (toasts, modals, loaders) to improve user communication and trust.
+
+Toasts: Implemented using `react-hot-toast`. Global provider is mounted in the app layout so any page can trigger toasts via `toast.success`, `toast.error`, `toast.loading`.
+Modals: Accessible modal primitive is available at `src/components/ui/Modal.tsx`. It traps focus, closes on `Esc`, and provides a transparent overlay.
+Loaders: Spinner component at `src/components/ui/Loader.tsx` with `role="status"` and `aria-live="polite"` for screen readers.
+
+Where used
+
+Demoed in the signup flow: `src/app/signup/page.tsx` — clicking "Sign Up" opens a confirmation modal, confirming runs the async signup with a loader and toast feedback for success/failure.
+
+Accessibility & UX Notes
+
+Toasts use concise language and auto-dismiss after 4s. Screen readers receive polite announcements.
+Modals use `aria-modal="true"` and `aria-labelledby` with keyboard handling.
+Loaders provide non-blocking visual feedback and are used alongside toasts so users understand progress and results.
+
+How to try
+
+1. Install dependencies:
+
+```bash
+npm install
+```
+
+2. Run dev server:
+
+```bash
+npm run dev
+```
+
+3. Open `/signup` and follow the flow: Sign Up → Confirm modal → Loading spinner → Success toast (or error toast on failure).
+
+Reflection
+
+Adding these primitives made the flows clearer and more trustworthy: instant confirmations (toasts), clear blocking decisions (modals), and progress awareness (loaders) reduce user uncertainty and error.
 
 ### JWT Token Structure
 ```json
