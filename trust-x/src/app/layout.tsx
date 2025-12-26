@@ -5,6 +5,7 @@ import "./globals.css";
 import { LayoutWrapper } from "@/components";
 import { AuthProvider } from "@/context/AuthContext";
 import { UIProvider } from "@/context/UIContext";
+import Toasts from "@/components/ui/Toasts";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -33,6 +34,7 @@ export default function RootLayout({
           <UIProvider>
             <LayoutWrapper>
               {children}
+              <Toasts />
               <footer className="border-t mt-8 py-6 text-center text-sm text-gray-500">
                 © {new Date().getFullYear()} TrustX
               </footer>
