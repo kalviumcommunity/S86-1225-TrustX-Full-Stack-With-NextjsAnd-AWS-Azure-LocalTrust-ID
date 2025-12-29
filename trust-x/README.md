@@ -427,6 +427,144 @@ Reflection
 
 Adding these primitives made the flows clearer and more trustworthy: instant confirmations (toasts), clear blocking decisions (modals), and progress awareness (loaders) reduce user uncertainty and error.
 
+Responsive & Themed Design
+==========================
+
+This project implements responsive design with custom breakpoints and a fully functional light/dark theme system using TailwindCSS v4.
+
+Theme Configuration (Tailwind v4)
+---------------------------------
+
+Tailwind v4 uses CSS-based configuration via `@theme` in `globals.css`:
+
+**File**: [src/app/globals.css](src/app/globals.css)
+
+Custom theme tokens:
+- **Brand Colors**: `--color-brand-light` (#93C5FD), `--color-brand` (#3B82F6), `--color-brand-dark` (#1E40AF)
+- **Theme-aware Variables**: `--color-background`, `--color-foreground` adapt based on `.dark` class
+- **Custom Breakpoints**: sm (640px), md (768px), lg (1024px), xl (1280px), 2xl (1536px)
+
+Dark Mode Implementation
+------------------------
+
+Dark mode is controlled via a `.dark` class on the `<html>` element:
+
+```css
+.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+}
+```
+
+**Theme Toggle Component**: [src/components/ui/ThemeToggle.tsx](src/components/ui/ThemeToggle.tsx)
+- Moon/sun icons indicate current theme
+- Integrates with `UIContext` for global state management
+- Persists theme preference to `localStorage`
+- Accessible: includes `aria-label` and keyboard support
+
+Usage in Components
+-------------------
+
+All major components support dark mode using Tailwind's `dark:` variant:
+
+**Header**: [src/components/layout/Header.tsx](src/components/layout/Header.tsx)
+- Responsive padding: `px-4 md:px-6`
+- Responsive text: `text-base md:text-lg lg:text-xl`
+- Dark mode: `dark:bg-gray-800`
+- Theme toggle button in navigation
+
+**Sidebar**: [src/components/layout/Sidebar.tsx](src/components/layout/Sidebar.tsx)
+- Responsive width: `w-48 lg:w-64`
+- Hidden on mobile: `hidden md:block`
+- Dark mode: `dark:bg-gray-800 dark:border-gray-700`
+
+**Forms**: [src/components/FormInput.tsx](src/components/FormInput.tsx)
+- Dark backgrounds: `dark:bg-gray-700`
+- Dark borders: `dark:border-gray-600`
+- Focus ring: `focus:ring-brand dark:focus:ring-brand-light`
+
+**Modal**: [src/components/ui/Modal.tsx](src/components/ui/Modal.tsx)
+- Responsive padding: `p-4 md:p-6`
+- Dark mode: `dark:bg-gray-800`
+
+Responsive Breakpoints
+----------------------
+
+The application adapts to different screen sizes:
+
+| Breakpoint | Width | Behavior |
+|------------|-------|----------|
+| **Mobile** | < 640px | Single column, collapsed sidebar, smaller text |
+| **Tablet** | 640px - 1024px | Sidebar visible, medium text, adjusted padding |
+| **Desktop** | > 1024px | Full layout, larger text, spacious padding |
+
+Testing Responsive Design
+-------------------------
+
+1. Open Chrome DevTools (F12)
+2. Toggle Device Toolbar (Ctrl+Shift+M / Cmd+Shift+M)
+3. Test presets: iPhone SE, iPad, Desktop HD
+4. Verify:
+   - Text scales appropriately
+   - Sidebar hides on mobile
+   - Forms remain readable
+   - Theme toggle accessible
+
+Accessibility Considerations
+----------------------------
+
+**Color Contrast**: All color combinations meet WCAG AA standards:
+- Light mode: dark text on light backgrounds
+- Dark mode: light text on dark backgrounds
+- Brand colors tested for sufficient contrast
+
+**Keyboard Navigation**: Theme toggle is fully keyboard accessible with proper focus indicators
+
+**Screen Readers**: Theme toggle includes descriptive `aria-label` announcing the action
+
+**Persistent Preferences**: User's theme choice saved to `localStorage` and restored on page load
+
+Files Modified for Theming
+---------------------------
+
+- [src/app/globals.css](src/app/globals.css#L1-L35) — Theme tokens and dark mode CSS variables
+- [src/components/ui/ThemeToggle.tsx](src/components/ui/ThemeToggle.tsx) — Theme toggle button with icons
+- [src/components/layout/Header.tsx](src/components/layout/Header.tsx) — Responsive header with theme toggle
+- [src/components/layout/Sidebar.tsx](src/components/layout/Sidebar.tsx) — Responsive sidebar with dark mode
+- [src/components/layout/LayoutWrapper.tsx](src/components/layout/LayoutWrapper.tsx) — Theme-aware layout container
+- [src/components/FormInput.tsx](src/components/FormInput.tsx) — Dark mode form inputs
+- [src/components/ui/Modal.tsx](src/components/ui/Modal.tsx) — Responsive and themed modal
+- [src/components/ui/Loader.tsx](src/components/ui/Loader.tsx) — Theme-aware loader spinner
+- [src/app/signup/page.tsx](src/app/signup/page.tsx) — Responsive signup form with dark mode
+
+How to Test
+-----------
+
+1. Start dev server:
+```bash
+npm run dev
+```
+
+2. Visit any page (e.g., http://localhost:3000/signup)
+
+3. Click the theme toggle in the header (moon/sun icon)
+
+4. Verify dark mode applies across all components
+
+5. Test responsive behavior:
+   - Resize browser window
+   - Use DevTools device emulation
+   - Check sidebar visibility at different breakpoints
+
+Reflection
+----------
+
+**Challenges**: Migrating to Tailwind v4's CSS-based configuration required understanding `@theme` syntax instead of traditional `tailwind.config.js`.
+
+**Solutions**: Used CSS custom properties for theme variables and `.dark` class for mode switching, which integrates cleanly with React state management.
+
+**Results**: The app now provides a consistent, accessible experience across all devices and lighting conditions. Users can customize their experience, and the design system remains maintainable with centralized theme tokens.
+
 ### JWT Token Structure
 ```json
 {
