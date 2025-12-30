@@ -1243,6 +1243,610 @@ Reflection
 
 ---
 
+Role-Based Access Control (RBAC)
+=================================
+
+This project implements a comprehensive Role-Based Access Control system to manage user permissions and ensure secure, auditable access to resources.
+
+Why RBAC Matters
+----------------
+
+**Security Concerns Without RBAC**:
+- **Privilege Escalation**: Users accessing resources beyond their authority
+- **Data Breaches**: Unauthorized access to sensitive information
+- **Compliance Issues**: Difficulty proving access control for audits
+- **Maintenance Overhead**: Permission checks scattered throughout code
+- **No Audit Trail**: Unable to track who accessed what
+
+**Our RBAC Solution**:
+- ✅ **Clear Role Hierarchy**: ADMIN > EDITOR > USER > VIEWER
+- ✅ **Permission-Based Access**: Fine-grained control over actions
+- ✅ **Resource-Level Permissions**: Different permissions per resource type
+- ✅ **Server-Side Enforcement**: All checks on backend, not just UI
+- ✅ **Comprehensive Logging**: Full audit trail of allow/deny decisions
+- ✅ **Client & Server Utilities**: Easy to use hooks and middleware
+- ✅ **Scalable Architecture**: Easy to extend with new roles/permissions
+
+Role Hierarchy & Permissions
+----------------------------
+
+### Role Definitions
+
+| Role | Level | Permissions | Use Case |
+|------|-------|-------------|----------|
+| **ADMIN** | 4 | Full access (create, read, update, delete, manage all) | System administrators, full control |
+| **EDITOR** | 3 | create, read, update, manage projects/orders | Content managers, project leads |
+| **USER** | 2 | read, update (own resources), upload files | Regular authenticated users |
+| **VIEWER** | 1 | read-only access | Read-only observers, auditors |
+
+### Permission Types
+
+**Action-Based Permissions**:
+- `create` - Create new resources
+- `read` - View/fetch resources
+- `update` - Modify existing resources
+- `delete` - Remove resources
+
+**Resource-Based Permissions**:
+- `manage_users` - User management operations
+- `manage_projects` - Project management operations
+- `manage_orders` - Order management operations
+- `view_analytics` - Access analytics dashboards
+- `manage_settings` - Modify system settings
+- `upload_files` - File upload capabilities
+
+### Permission Matrix
+
+```
+Permission          | ADMIN | EDITOR | USER | VIEWER
+--------------------|-------|--------|------|--------
+create              |   ✓   |   ✓    |  ✗   |   ✗
+read                |   ✓   |   ✓    |  ✓   |   ✓
+update              |   ✓   |   ✓    |  ✓   |   ✗
+delete              |   ✓   |   ✗    |  ✗   |   ✗
+manage_users        |   ✓   |   ✗    |  ✗   |   ✗
+manage_projects     |   ✓   |   ✓    |  ✗   |   ✗
+manage_orders       |   ✓   |   ✓    |  ✗   |   ✗
+view_analytics      |   ✓   |   ✗    |  ✗   |   ✗
+manage_settings     |   ✓   |   ✗    |  ✗   |   ✗
+upload_files        |   ✓   |   ✓    |  ✓   |   ✗
+```
+
+### Resource-Specific Permissions
+
+Different resources can have different permission rules:
+
+**Users Resource**:
+- ADMIN: Full CRUD + manage_users
+- EDITOR, USER, VIEWER: Read only
+
+**Projects Resource**:
+- ADMIN: Full CRUD
+- EDITOR: Create, Read, Update
+- USER: Read, Update (own projects only)
+- VIEWER: Read only
+
+**Files Resource**:
+- ADMIN, EDITOR, USER: Upload and manage own files
+- VIEWER: Read only
+
+Implementation Architecture
+---------------------------
+
+### Server-Side (Backend)
+
+**[src/config/roles.ts](src/config/roles.ts)** - Role definitions
+```typescript
+export const rolePermissions: Record<Role, Permission[]> = {
+  ADMIN: ['create', 'read', 'update', 'delete', ...],
+  EDITOR: ['create', 'read', 'update', ...],
+  USER: ['read', 'update', 'upload_files'],
+  VIEWER: ['read'],
+};
+```
+
+**[src/lib/rbac.ts](src/lib/rbac.ts)** - Server utilities
+```typescript
+// Extract user context from JWT token
+export function getUserContext(req: NextRequest): RBACContext | null
+
+// Require authentication
+export function requireAuth(req: NextRequest): RBACContext | NextResponse
+
+// Require specific permission
+export function requirePermission(
+  req: NextRequest,
+  permission: Permission,
+  resource?: string
+): RBACContext | NextResponse
+
+// Require specific role (or higher)
+export function requireRole(
+  req: NextRequest,
+  requiredRole: Role,
+  resource?: string
+): RBACContext | NextResponse
+
+// Require resource-specific permission
+export function requireResourcePermission(
+  req: NextRequest,
+  resource: string,
+  permission: Permission
+): RBACContext | NextResponse
+
+// Check permission (returns boolean)
+export function canPerformAction(
+  context: RBACContext,
+  permission: Permission,
+  resource?: string
+): boolean
+
+// Log RBAC decision for audit trail
+export function logRBACDecision(
+  context: RBACContext,
+  action: string,
+  resource: string,
+  permission: Permission | string,
+  decision: 'ALLOWED' | 'DENIED',
+  reason?: string
+): void
+```
+
+### Client-Side (Frontend)
+
+**[src/hooks/useRBAC.ts](src/hooks/useRBAC.ts)** - React hook
+```typescript
+const {
+  role,                    // Current user's role
+  hasPermission,           // Check specific permission
+  hasResourcePermission,   // Check resource permission
+  isRoleAtLeast,          // Check role hierarchy
+  canCreate,              // Convenience: has 'create'
+  canRead,                // Convenience: has 'read'
+  canUpdate,              // Convenience: has 'update'
+  canDelete,              // Convenience: has 'delete'
+  isAdmin,                // Convenience: role === 'ADMIN'
+  isEditor,               // Convenience: role >= 'EDITOR'
+} = useRBAC();
+```
+
+**[src/components/RBACGuard.tsx](src/components/RBACGuard.tsx)** - Guard component
+```tsx
+// Guard with permission
+<RBACGuard permission="delete">
+  <button>Delete</button>
+</RBACGuard>
+
+// Guard with role
+<RBACGuard role="ADMIN">
+  <AdminPanel />
+</RBACGuard>
+
+// Guard with resource permission
+<RBACGuard resource="projects" resourcePermission="update">
+  <EditProjectButton />
+</RBACGuard>
+
+// Convenience components
+<AdminOnly><AdminDashboard /></AdminOnly>
+<EditorOrAbove><EditControls /></EditorOrAbove>
+<CanDelete><DeleteButton /></CanDelete>
+```
+
+Usage Examples
+-------------
+
+### Server-Side: API Route Protection
+
+**Example 1: Require Specific Permission**
+```typescript
+// src/app/api/projects/route.ts
+import { requireResourcePermission } from '@/lib/rbac';
+
+export async function POST(req: NextRequest) {
+  // Require 'create' permission on 'projects' resource
+  const context = requireResourcePermission(req, 'projects', 'create');
+  
+  // If context is Response, user doesn't have permission
+  if (context instanceof Response) {
+    return context; // Returns 403 Forbidden
+  }
+
+  // User has permission, proceed with logic
+  const project = await createProject(context.userId, data);
+  return sendSuccess(project, 'Project created');
+}
+```
+
+**Example 2: Require Admin Role**
+```typescript
+// src/app/api/admin/users/[id]/route.ts
+import { requireRole } from '@/lib/rbac';
+
+export async function DELETE(req: NextRequest, { params }) {
+  // Only ADMIN can delete users
+  const context = requireRole(req, 'ADMIN', 'users');
+  
+  if (context instanceof Response) {
+    return context; // Returns 403 Forbidden
+  }
+
+  await deleteUser(params.id);
+  return sendSuccess(null, 'User deleted');
+}
+```
+
+**Example 3: Conditional Logic Based on Role**
+```typescript
+import { getUserContext, canPerformAction } from '@/lib/rbac';
+
+export async function GET(req: NextRequest) {
+  const context = getUserContext(req);
+  
+  if (!context) {
+    return sendError('Authentication required', 401);
+  }
+
+  // Admins see all projects, others see only their own
+  const projects = await prisma.project.findMany({
+    where: context.role === 'ADMIN' ? {} : { userId: context.userId },
+  });
+
+  return sendSuccess(projects);
+}
+```
+
+**Example 4: Multiple Permission Checks**
+```typescript
+import { requireAnyPermission } from '@/lib/rbac';
+
+export async function PUT(req: NextRequest) {
+  // Require ANY of these permissions
+  const context = requireAnyPermission(
+    req,
+    ['update', 'manage_projects'],
+    'projects'
+  );
+  
+  if (context instanceof Response) {
+    return context;
+  }
+
+  // User has at least one required permission
+  // ...update logic
+}
+```
+
+### Client-Side: UI Access Control
+
+**Example 1: Conditional Rendering**
+```tsx
+'use client';
+
+import { useRBAC } from '@/hooks/useRBAC';
+
+export default function ProjectActions({ project }) {
+  const { canUpdate, canDelete, isAdmin } = useRBAC();
+
+  return (
+    <div>
+      {canUpdate && <button>Edit</button>}
+      {canDelete && <button>Delete</button>}
+      {isAdmin && <button>Advanced Settings</button>}
+    </div>
+  );
+}
+```
+
+**Example 2: Using RBAC Guard**
+```tsx
+import { RBACGuard, AdminOnly } from '@/components/RBACGuard';
+
+export default function Dashboard() {
+  return (
+    <div>
+      <h1>Dashboard</h1>
+      
+      <RBACGuard permission="create">
+        <button>Create New Project</button>
+      </RBACGuard>
+
+      <RBACGuard resource="projects" resourcePermission="delete">
+        <button>Delete Project</button>
+      </RBACGuard>
+
+      <AdminOnly>
+        <div>Admin-only panel</div>
+      </AdminOnly>
+    </div>
+  );
+}
+```
+
+**Example 3: Role-Based Layouts**
+```tsx
+import { useRBAC } from '@/hooks/useRBAC';
+
+export default function Sidebar() {
+  const { isAdmin, isEditor, role } = useRBAC();
+
+  return (
+    <nav>
+      <a href="/dashboard">Dashboard</a>
+      {isEditor && <a href="/projects">Manage Projects</a>}
+      {isAdmin && <a href="/admin/users">Manage Users</a>}
+      {isAdmin && <a href="/admin/settings">Settings</a>}
+      <p className="text-sm">Logged in as: {role}</p>
+    </nav>
+  );
+}
+```
+
+Audit Logging
+------------
+
+Every RBAC decision is automatically logged with comprehensive details:
+
+### Log Format
+```typescript
+interface RBACLogEntry {
+  timestamp: string;
+  action: string;
+  resource: string;
+  userId: number;
+  email: string;
+  role: Role;
+  permission: Permission | string;
+  decision: 'ALLOWED' | 'DENIED';
+  reason?: string;
+  ip?: string;
+}
+```
+
+### Example Logs
+```
+✅ [RBAC] ADMIN (admin@trustx.com) attempted to 'delete' on users: ALLOWED
+🚫 [RBAC] USER (user@trustx.com) attempted to 'delete' on users: DENIED - Role 'USER' lacks permission 'delete'
+✅ [RBAC] EDITOR (editor@trustx.com) attempted to 'create' on projects: ALLOWED
+🚫 [RBAC] VIEWER (viewer@trustx.com) attempted to 'update' on projects: DENIED - Role 'VIEWER' lacks 'update' permission on 'projects'
+```
+
+### Viewing Logs
+
+**Development**: Check server console for real-time RBAC logs
+
+**Production**: Integrate with logging services:
+- AWS CloudWatch
+- Datadog
+- Sentry
+- LogRocket
+- Custom logging database
+
+Testing RBAC
+------------
+
+### Interactive Test Page
+
+Visit [/test-rbac](src/app/test-rbac/page.tsx) for comprehensive RBAC testing:
+
+1. **Login as Different Roles** - Quick buttons to test each role
+2. **Test API Endpoints** - Try protected routes and see allow/deny
+3. **UI Component Tests** - See which elements appear/hide by role
+4. **Permissions Matrix** - Visual table of role permissions
+5. **Audit Logs** - Real-time client-side log of actions
+
+### Manual Testing Steps
+
+**1. Test Admin Access**
+```bash
+# Login as admin
+curl -X POST http://localhost:3000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@trustx.com","password":"admin123"}' \
+  -c cookies.txt
+
+# Should succeed: Delete user (admin-only)
+curl -X DELETE http://localhost:3000/api/admin/users/5 \
+  -b cookies.txt
+
+# Check server console for log:
+# ✅ [RBAC] ADMIN (admin@trustx.com) attempted to 'role:ADMIN' on users: ALLOWED
+```
+
+**2. Test Editor Access**
+```bash
+# Login as editor
+curl -X POST http://localhost:3000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"editor@trustx.com","password":"editor123"}' \
+  -c cookies.txt
+
+# Should succeed: Create project
+curl -X POST http://localhost:3000/api/projects \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Test Project"}' \
+  -b cookies.txt
+
+# Should fail: Delete user (requires ADMIN)
+curl -X DELETE http://localhost:3000/api/admin/users/5 \
+  -b cookies.txt
+# Expected: 403 Forbidden
+```
+
+**3. Test Viewer Access**
+```bash
+# Login as viewer
+curl -X POST http://localhost:3000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"viewer@trustx.com","password":"viewer123"}' \
+  -c cookies.txt
+
+# Should succeed: Read projects
+curl http://localhost:3000/api/projects -b cookies.txt
+
+# Should fail: Create project (requires 'create' permission)
+curl -X POST http://localhost:3000/api/projects \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Test"}' \
+  -b cookies.txt
+# Expected: 403 Forbidden
+```
+
+### Test Results Matrix
+
+| Endpoint | ADMIN | EDITOR | USER | VIEWER |
+|----------|-------|--------|------|--------|
+| GET /api/users | ✅ | ✅ | ✅ | ✅ |
+| GET /api/projects | ✅ | ✅ | ✅ | ✅ |
+| POST /api/projects | ✅ | ✅ | 🚫 | 🚫 |
+| PUT /api/projects/:id | ✅ | ✅ | ✅* | 🚫 |
+| DELETE /api/projects/:id | ✅ | 🚫 | 🚫 | 🚫 |
+| DELETE /api/admin/users/:id | ✅ | 🚫 | 🚫 | 🚫 |
+
+*USER can only update their own resources
+
+Files Created
+-------------
+
+**Configuration**:
+- [src/config/roles.ts](src/config/roles.ts) - Role definitions and permission mappings
+
+**Server-Side**:
+- [src/lib/rbac.ts](src/lib/rbac.ts) - RBAC utilities and middleware helpers
+- [src/app/api/projects/route.ts](src/app/api/projects/route.ts) - Updated with RBAC checks
+- [src/app/api/users/route.ts](src/app/api/users/route.ts) - Updated with RBAC checks
+- [src/app/api/admin/users/[id]/route.ts](src/app/api/admin/users/[id]/route.ts) - Admin-only endpoint
+
+**Client-Side**:
+- [src/hooks/useRBAC.ts](src/hooks/useRBAC.ts) - React hook for permissions
+- [src/components/RBACGuard.tsx](src/components/RBACGuard.tsx) - Guard components
+
+**Testing**:
+- [src/app/test-rbac/page.tsx](src/app/test-rbac/page.tsx) - Interactive RBAC test dashboard
+
+Extending RBAC
+--------------
+
+### Adding New Roles
+
+```typescript
+// src/config/roles.ts
+export type Role = 'ADMIN' | 'EDITOR' | 'USER' | 'VIEWER' | 'MODERATOR';
+
+export const rolePermissions: Record<Role, Permission[]> = {
+  // ... existing roles
+  MODERATOR: ['read', 'update', 'manage_users'],
+};
+
+export const roleHierarchy: Record<Role, number> = {
+  VIEWER: 1,
+  USER: 2,
+  MODERATOR: 3,
+  EDITOR: 4,
+  ADMIN: 5,
+};
+```
+
+### Adding New Permissions
+
+```typescript
+// src/config/roles.ts
+export type Permission = 
+  | 'create' 
+  | 'read' 
+  | 'update' 
+  | 'delete'
+  | 'approve_content'  // New permission
+  | 'ban_users';       // New permission
+
+export const rolePermissions: Record<Role, Permission[]> = {
+  ADMIN: [...existing, 'approve_content', 'ban_users'],
+  MODERATOR: [...existing, 'approve_content'],
+};
+```
+
+### Adding Resource-Specific Rules
+
+```typescript
+// src/config/roles.ts
+export const resourcePermissions: Record<string, Record<Role, Permission[]>> = {
+  // ... existing resources
+  comments: {
+    ADMIN: ['create', 'read', 'update', 'delete'],
+    MODERATOR: ['read', 'update', 'delete'],
+    USER: ['create', 'read', 'update'],
+    VIEWER: ['read'],
+  },
+};
+```
+
+Security Best Practices
+-----------------------
+
+### DO's ✅
+- ✅ **Always enforce on backend**: UI checks are for UX, not security
+- ✅ **Use resource-specific permissions**: Fine-grained control reduces risk
+- ✅ **Log all decisions**: Essential for audits and debugging
+- ✅ **Check ownership**: Ensure users can only modify their own resources
+- ✅ **Use JWT roles**: Store role in token for stateless auth
+- ✅ **Test thoroughly**: Use test page and manual testing
+
+### DON'Ts 🚫
+- 🚫 **Don't rely on client-side checks alone**: Always validate on server
+- 🚫 **Don't expose sensitive info in errors**: Generic messages prevent enumeration
+- 🚫 **Don't hardcode permissions in routes**: Use centralized config
+- 🚫 **Don't skip logging**: Audit trails are critical for security
+- 🚫 **Don't allow privilege escalation**: Validate role changes server-side
+
+Scalability Considerations
+--------------------------
+
+**Current Design**: Static role-permission mapping in code
+
+**For Complex Systems, Consider**:
+- **Database-stored permissions**: Dynamic role creation via admin UI
+- **Policy-based access control (PBAC)**: Attribute-based rules (e.g., time, location)
+- **Context-aware permissions**: Different permissions based on resource state
+- **Inherited permissions**: Organizational hierarchies and teams
+- **Temporary permissions**: Time-limited access grants
+
+**Migration Path**:
+```typescript
+// Current: Static config
+const permissions = rolePermissions[role];
+
+// Future: Database lookup
+const permissions = await prisma.rolePermission.findMany({
+  where: { roleId: user.roleId },
+  select: { permission: true },
+});
+```
+
+Reflection
+----------
+
+**Challenges**:
+- Balancing granularity with simplicity (too many roles = confusion)
+- Ensuring all endpoints are protected consistently
+- Managing ownership checks (users updating their own vs. all resources)
+- Performance impact of permission checks on every request
+
+**Solutions**:
+- Defined clear role hierarchy with 4 levels (enough for most apps)
+- Created reusable middleware helpers for consistent enforcement
+- Implemented resource-specific permissions for ownership rules
+- Used JWT-based auth for fast, stateless permission checks
+
+**Results**:
+- ✅ **Zero unauthorized access**: All endpoints protected with RBAC
+- ✅ **Complete audit trail**: Every allow/deny decision logged
+- ✅ **Developer-friendly API**: Easy-to-use hooks and middleware
+- ✅ **Scalable architecture**: Can extend with new roles/permissions
+- ✅ **Production-ready**: Comprehensive testing and documentation
+- ✅ **Compliance-ready**: Full audit logs for regulatory requirements
+
+---
+
 Forms: React Hook Form + Zod
 ----------------------------
 
