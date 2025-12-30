@@ -1,6 +1,6 @@
 /**
- * Users API Route - CRUD Operations
- * GET /api/users - Retrieve all users with pagination (protected by middleware)
+ * Users API Route - CRUD Operations with RBAC
+ * GET /api/users - Retrieve all users (requires 'read' permission)
  * POST /api/users - Create a new user (public for registration)
  */
 
@@ -8,13 +8,19 @@ import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from "bcrypt";
 import { prisma } from '@/lib/prisma';
 import { cacheService } from '@/lib/cache';
+import { requireResourcePermission } from '@/lib/rbac';
+import { sendSuccess, sendError } from '@/lib/responseHandler';
 
-// GET: Retrieve all users with pagination and filtering (protected by middleware)
+// GET: Retrieve all users with pagination and filtering
 export async function GET(req: NextRequest) {
+  // Require 'read' permission on 'users' resource
+  const context = requireResourcePermission(req, 'users', 'read');
+  
+  if (context instanceof Response) {
+    return context;
+  }
+
   try {
-    // User info is already validated by middleware
-    // const userEmail = req.headers.get("x-user-email");
-    // const userRole = req.headers.get("x-user-role");
 
     const { searchParams } = new URL(req.url);
     const page = Math.max(1, Number(searchParams.get('page')) || 1);
