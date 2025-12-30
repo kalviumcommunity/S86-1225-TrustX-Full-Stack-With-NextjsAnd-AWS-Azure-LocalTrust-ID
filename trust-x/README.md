@@ -763,6 +763,47 @@ Reflection
 - App resilience increased — errors don't crash the entire application
 - User confidence improved through consistent, friendly feedback
 
+---
+
+Secure JWT & Session Management
+===============================
+
+This project implements a secure dual-token authentication system with access and refresh tokens stored in HTTP-only cookies for protection against XSS and CSRF attacks.
+
+Why This Matters
+----------------
+
+**Security Concerns Without Proper JWT Management**:
+- **XSS Attacks**: LocalStorage tokens can be stolen by malicious scripts
+- **CSRF Attacks**: Cookies without proper flags are vulnerable
+- **Token Theft**: Long-lived tokens increase attack surface
+- **Session Fixation**: Without token rotation, compromised tokens stay valid
+- **No Logout**: If tokens can't be invalidated, users can't truly log out
+
+**Our Solution**:
+- ✅ **HTTP-only cookies**: Tokens inaccessible to JavaScript
+- ✅ **SameSite: strict**: Protection against CSRF attacks
+- ✅ **Secure flag**: Cookies only sent over HTTPS in production
+- ✅ **Short-lived access tokens**: 15 minutes reduces exposure
+- ✅ **Long-lived refresh tokens**: 7 days for better UX
+- ✅ **Automatic token refresh**: Seamless user experience
+- ✅ **Server-side validation**: All tokens verified on backend
+
+Token Architecture
+-----------------
+
+### Access Token (Short-lived)
+- **Expiry**: 15 minutes
+- **Purpose**: Authorizes API requests
+- **Storage**: HTTP-only cookie + in-memory on client
+- **Refresh**: Automatically refreshed when expired
+
+### Refresh Token (Long-lived)
+- **Expiry**: 7 days
+- **Purpose**: Issues new access tokens
+- **Storage**: HTTP-only cookie only
+- **Security**: Cannot be accessed by client-side JavaScript
+
 ### JWT Token Structure
 ```json
 {
@@ -774,9 +815,433 @@ Reflection
 }
 ```
 
-### Middleware Logic
-- **Token Validation**: Verifies JWT signature and expiration
-- **Role Checking**: Compares user role against required permissions
+Token Flow Diagram
+-----------------
+
+```
+┌─────────────┐
+│   CLIENT    │
+└──────┬──────┘
+       │ 1. POST /api/auth/login
+       │    { email, password }
+       ▼
+┌─────────────────────────────┐
+│         SERVER              │
+│ ┌─────────────────────────┐ │
+│ │  Verify credentials     │ │
+│ │  Generate tokens:       │ │
+│ │  - Access (15min)       │ │
+│ │  - Refresh (7days)      │ │
+│ └─────────────────────────┘ │
+└──────┬──────────────────────┘
+       │ 2. Set HTTP-only cookies
+       │    + Return access token in body
+       ▼
+┌─────────────┐
+│   CLIENT    │ 3. Store access token in memory
+│             │    setAccessToken(token)
+└──────┬──────┘
+       │ 4. API Request
+       │    Authorization: Bearer {accessToken}
+       │    Cookie: refreshToken (auto-sent)
+       ▼
+┌─────────────────────────────┐
+│    MIDDLEWARE               │
+│ ┌─────────────────────────┐ │
+│ │ Verify access token     │ │
+│ │ - Valid? → Continue     │ │
+│ │ - Expired? → 401 error  │ │
+│ └─────────────────────────┘ │
+└──────┬──────────────────────┘
+       │ 5. If 401, client auto-refreshes
+       ▼
+┌─────────────┐
+│   CLIENT    │ POST /api/auth/refresh
+└──────┬──────┘ (refreshToken sent in cookie)
+       ▼
+┌─────────────────────────────┐
+│         SERVER              │
+│ ┌─────────────────────────┐ │
+│ │  Verify refresh token   │ │
+│ │  Generate new access    │ │
+│ │  token (15min)          │ │
+│ └─────────────────────────┘ │
+└──────┬──────────────────────┘
+       │ 6. New access token
+       ▼
+┌─────────────┐
+│   CLIENT    │ 7. Retry original request
+│             │    with new access token
+└─────────────┘
+```
+
+Implementation Files
+-------------------
+
+### Backend (Server-side)
+
+**[src/lib/jwt.ts](src/lib/jwt.ts)** — JWT utility functions
+```typescript
+export function generateAccessToken(user: User): string
+export function generateRefreshToken(user: User): string
+export function verifyAccessToken(token: string): JWTPayload | null
+export function verifyRefreshToken(token: string): JWTPayload | null
+export function isTokenExpired(token: string): boolean
+export function getTokenExpiry(token: string): Date | null
+```
+
+**[src/app/api/auth/login/route.ts](src/app/api/auth/login/route.ts)** — Login endpoint
+- Verifies email/password with bcrypt
+- Generates access + refresh tokens
+- Sets HTTP-only cookies with secure flags
+- Returns user data and access token in body
+
+**[src/app/api/auth/refresh/route.ts](src/app/api/auth/refresh/route.ts)** — Token refresh endpoint
+- Extracts refresh token from HTTP-only cookie
+- Verifies token validity and user existence
+- Generates new access token (15min)
+- Updates cookie with new token
+
+**[src/app/api/auth/logout/route.ts](src/app/api/auth/logout/route.ts)** — Logout endpoint
+- Clears both accessToken and refreshToken cookies
+- Sets maxAge: 0 to expire immediately
+
+**[src/app/middleware.ts](src/app/middleware.ts)** — Route protection
+- Validates access tokens on protected routes
+- Checks tokens from cookies or Authorization header
+- Enforces RBAC for admin endpoints
+- Returns clear error messages with refresh hints
+
+### Frontend (Client-side)
+
+**[src/lib/authClient.ts](src/lib/authClient.ts)** — Client auth utilities
+```typescript
+export function login(email: string, password: string)
+export function logout()
+export function fetchWithAuth(url: string, options?: RequestInit)
+export const authFetch = { get, post, put, delete }
+```
+
+**Key Features**:
+- Stores access token in memory (not localStorage)
+- Automatically refreshes on 401 errors
+- Prevents duplicate refresh requests
+- Redirects to login if refresh fails
+- Convenience methods for HTTP verbs
+
+Security Measures
+----------------
+
+### XSS Protection
+- ✅ **HTTP-only cookies**: Tokens cannot be accessed via `document.cookie`
+- ✅ **In-memory storage**: Access token never persists to localStorage
+- ✅ **No eval()**: No dynamic code execution
+- ✅ **Content Security Policy**: Can be added to headers
+
+### CSRF Protection
+- ✅ **SameSite: strict**: Cookies only sent on same-origin requests
+- ✅ **Secure flag**: Cookies only sent over HTTPS in production
+- ✅ **Origin validation**: Middleware can check request origin
+
+### Token Security
+- ✅ **Short expiry**: Access tokens expire in 15 minutes
+- ✅ **Separate secrets**: Access and refresh tokens use different secrets
+- ✅ **Server-side validation**: All tokens verified with JWT signature
+- ✅ **No sensitive data**: Tokens only contain user ID, email, role
+
+### Best Practices
+- ✅ **Never log tokens**: Exclude from logs and error messages
+- ✅ **Rotate secrets regularly**: Update JWT_SECRET and REFRESH_TOKEN_SECRET periodically
+- ✅ **Monitor token activity**: Track login attempts and refresh patterns
+- ✅ **Implement rate limiting**: Prevent brute force attacks on auth endpoints
+- ✅ **Use HTTPS in production**: Ensure secure flag works correctly
+
+Usage Examples
+-------------
+
+### Client-side: Login Flow
+```typescript
+import { login, authFetch } from '@/lib/authClient';
+
+// 1. Login
+const result = await login('user@example.com', 'password123');
+if (result.success) {
+  console.log('Logged in:', result.user);
+  // Access token stored in memory automatically
+}
+
+// 2. Make authenticated requests
+// Automatically includes access token and refreshes if expired
+const response = await authFetch.get('/api/users');
+const users = await response.json();
+
+// 3. POST with data
+const response = await authFetch.post('/api/projects', {
+  name: 'New Project',
+  description: 'Project description'
+});
+
+// 4. Logout
+await logout(); // Clears cookies and redirects to login
+```
+
+### Client-side: useEffect Hook
+```typescript
+'use client';
+
+import { useEffect, useState } from 'react';
+import { authFetch } from '@/lib/authClient';
+
+export default function UsersPage() {
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchUsers() {
+      try {
+        const response = await authFetch.get('/api/users');
+        const data = await response.json();
+        if (data.success) {
+          setUsers(data.data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch users:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchUsers();
+  }, []);
+
+  if (loading) return <div>Loading...</div>;
+
+  return (
+    <div>
+      {users.map(user => (
+        <div key={user.id}>{user.name}</div>
+      ))}
+    </div>
+  );
+}
+```
+
+### Server-side: Protected API Route
+```typescript
+import { NextRequest } from 'next/server';
+import { sendSuccess, sendError } from '@/lib/responseHandler';
+import { verifyAccessToken } from '@/lib/jwt';
+
+export async function GET(req: NextRequest) {
+  // Get token from Authorization header or cookie
+  const authHeader = req.headers.get('authorization');
+  const token = authHeader?.replace('Bearer ', '') || 
+                req.cookies.get('accessToken')?.value;
+
+  if (!token) {
+    return sendError('No token provided', 401, 'UNAUTHORIZED');
+  }
+
+  // Verify token
+  const payload = verifyAccessToken(token);
+  if (!payload) {
+    return sendError('Invalid or expired token', 401, 'INVALID_TOKEN');
+  }
+
+  // Access user info from token
+  const userId = payload.id;
+  const userRole = payload.role;
+
+  // Your route logic here
+  const data = await fetchUserData(userId);
+  
+  return sendSuccess(data, 'Data fetched successfully');
+}
+```
+
+### Server-side: Admin-only Route
+```typescript
+export async function DELETE(req: NextRequest) {
+  const token = req.headers.get('authorization')?.replace('Bearer ', '');
+  const payload = verifyAccessToken(token!);
+
+  // Check admin role
+  if (payload?.role !== 'ADMIN') {
+    return sendError('Admin access required', 403, 'FORBIDDEN');
+  }
+
+  // Admin logic here
+  await deleteUser(userId);
+  return sendSuccess(null, 'User deleted successfully');
+}
+```
+
+Testing JWT Flow
+---------------
+
+### 1. Start Development Server
+```bash
+cd trust-x
+npm run dev
+```
+
+### 2. Test Login
+```bash
+# Use curl or Postman
+curl -X POST http://localhost:3000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@trustx.com","password":"admin123"}' \
+  -c cookies.txt
+
+# Expected response:
+# {
+#   "success": true,
+#   "message": "Login successful",
+#   "data": {
+#     "user": { "id": 1, "email": "admin@trustx.com", "role": "ADMIN" },
+#     "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+#   }
+# }
+```
+
+### 3. Test Protected Route
+```bash
+# With access token (works)
+curl http://localhost:3000/api/users \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -b cookies.txt
+
+# Without token (fails with 401)
+curl http://localhost:3000/api/users
+```
+
+### 4. Test Token Expiry (Wait 15 minutes or modify JWT_EXPIRY)
+```bash
+# After 15 minutes, access token expires
+curl http://localhost:3000/api/users \
+  -H "Authorization: Bearer EXPIRED_ACCESS_TOKEN" \
+  -b cookies.txt
+
+# Expected: 401 error with message about using /api/auth/refresh
+```
+
+### 5. Test Token Refresh
+```bash
+# Refresh token (sent automatically in cookie)
+curl -X POST http://localhost:3000/api/auth/refresh \
+  -b cookies.txt \
+  -c cookies.txt
+
+# Expected response:
+# {
+#   "success": true,
+#   "message": "Access token refreshed",
+#   "data": {
+#     "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+#   }
+# }
+```
+
+### 6. Test Client-side Automatic Refresh
+```typescript
+// In browser console
+import { authFetch } from '@/lib/authClient';
+
+// This will automatically refresh if token expired
+const response = await authFetch.get('/api/users');
+const data = await response.json();
+console.log(data);
+```
+
+### 7. Test Logout
+```bash
+curl -X POST http://localhost:3000/api/auth/logout \
+  -b cookies.txt
+
+# Cookies cleared, subsequent requests fail
+curl http://localhost:3000/api/users -b cookies.txt
+# Expected: 401 Unauthorized
+```
+
+Environment Variables
+--------------------
+
+Add these to your `.env` file:
+
+```bash
+# JWT Secrets (use strong random strings in production)
+JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+REFRESH_TOKEN_SECRET=your-super-secret-refresh-key-also-change-this
+
+# Token expiry times (optional, defaults shown)
+JWT_EXPIRY=15m
+REFRESH_TOKEN_EXPIRY=7d
+
+# Node environment
+NODE_ENV=development  # Use 'production' for prod
+```
+
+**Important**: 
+- Never commit real secrets to git
+- Use different secrets for dev/staging/production
+- Rotate secrets periodically
+- Use strong random strings (64+ characters recommended)
+
+Files Created
+-------------
+
+**Backend**:
+- [src/lib/jwt.ts](src/lib/jwt.ts) — JWT utility functions (generate, verify, check expiry)
+- [src/app/api/auth/login/route.ts](src/app/api/auth/login/route.ts) — Login endpoint with dual tokens
+- [src/app/api/auth/refresh/route.ts](src/app/api/auth/refresh/route.ts) — Token refresh endpoint
+- [src/app/api/auth/logout/route.ts](src/app/api/auth/logout/route.ts) — Logout endpoint
+- [src/app/middleware.ts](src/app/middleware.ts) — Route protection and validation
+
+**Frontend**:
+- [src/lib/authClient.ts](src/lib/authClient.ts) — Client-side auth utilities with auto-refresh
+
+Common Issues & Solutions
+------------------------
+
+### Issue: "No token provided" on every request
+**Solution**: Ensure cookies are being sent with `credentials: 'include'`
+
+### Issue: Token refresh loop (infinite refreshing)
+**Solution**: Check that refresh endpoint doesn't require access token
+
+### Issue: CORS errors in production
+**Solution**: Set proper CORS headers and ensure credentials allowed
+
+### Issue: Secure flag preventing cookies in dev
+**Solution**: Use `NODE_ENV=development` to disable secure flag
+
+### Issue: Token expired immediately
+**Solution**: Check server/client time synchronization
+
+Reflection
+----------
+
+**Challenges**: 
+- Balancing security with user experience
+- Implementing automatic token refresh without refresh loops
+- Preventing race conditions with concurrent refresh requests
+- Deciding between localStorage vs cookies vs memory storage
+
+**Solutions**: 
+- Used dual-token approach (short access, long refresh)
+- Implemented single in-flight refresh promise to prevent duplicates
+- Stored refresh token only in HTTP-only cookies
+- Kept access token in memory for client, cookies for middleware
+
+**Results**: 
+- ✅ Strong protection against XSS and CSRF attacks
+- ✅ Seamless user experience with automatic token refresh
+- ✅ Clear separation between client and server token handling
+- ✅ Flexible middleware for route protection and RBAC
+- ✅ Easy to test with curl and browser dev tools
+- ✅ Production-ready security with proper cookie flags
+
+---
 
 Forms: React Hook Form + Zod
 ----------------------------
@@ -798,6 +1263,10 @@ Example files added:
 Notes:
 - Keep labels associated with inputs and use `aria-invalid` for accessibility.
 - Validation schemas live next to usage in these examples; you can extract schemas to `src/lib/schemas` for reuse server-side.
+
+### Middleware Logic
+- **Token Validation**: Verifies JWT signature and expiration
+- **Role Checking**: Compares user role against required permissions
 
 - **Header Injection**: Adds user context to downstream handlers
 - **Error Responses**: Clear messages for different failure scenarios

@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { login } from '@/lib/authClient';
+import toast from 'react-hot-toast';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -16,26 +18,19 @@ export default function LoginPage() {
     setError('');
 
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password }),
-      });
+      const data = await login(email, password);
 
-      const data = await response.json();
-
-      if (response.ok && data.success) {
-        // Store token in localStorage
-        localStorage.setItem('token', data.token);
+      if (data.success) {
+        toast.success('Login successful!');
         // Redirect to dashboard or home
-        router.push('/');
+        router.push('/dashboard');
       } else {
         setError(data.message || 'Login failed');
+        toast.error(data.message || 'Login failed');
       }
     } catch {
       setError('Network error. Please try again.');
+      toast.error('Network error. Please try again.');
     } finally {
       setLoading(false);
     }
