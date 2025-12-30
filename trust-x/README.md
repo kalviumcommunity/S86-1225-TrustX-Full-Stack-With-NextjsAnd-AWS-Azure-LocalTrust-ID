@@ -565,6 +565,204 @@ Reflection
 
 **Results**: The app now provides a consistent, accessible experience across all devices and lighting conditions. Users can customize their experience, and the design system remains maintainable with centralized theme tokens.
 
+Error & Loading States
+======================
+
+This project implements comprehensive error boundaries and loading skeletons to ensure users never see blank screens or confusing crashes. Every route gracefully handles loading delays and errors with friendly, actionable feedback.
+
+Why Error & Loading States Matter
+---------------------------------
+
+Modern web apps involve asynchronous operations that can fail or take time. Without proper handling:
+- Users see blank screens and wonder if the app is broken
+- Errors crash the entire app with no recovery option
+- Trust erodes when users don't understand what's happening
+
+Our implementation ensures:
+- **Clear Communication**: Loading skeletons show what's coming
+- **Graceful Degradation**: Errors display helpful messages and retry options
+- **User Confidence**: Consistent feedback builds trust
+
+Loading Skeletons
+-----------------
+
+Loading skeletons provide visual placeholders that match the structure of incoming content, helping users anticipate what's loading.
+
+### Implementation
+
+**Root Loading** - [src/app/loading.tsx](src/app/loading.tsx)
+- Full-screen animated loader with gradient logo
+- Bouncing dots animation
+- Progress bar with shimmer effect
+- Used for initial app load and navigation
+
+**Users Page Loading** - [src/app/users/loading.tsx](src/app/users/loading.tsx)
+- Grid of user card skeletons (6 cards)
+- Gradient animated backgrounds
+- Staggered animation delays for visual flow
+- Loading message with spinner
+
+**Dashboard Loading** - [src/app/dashboard/loading.tsx](src/app/dashboard/loading.tsx)
+- Stats card skeletons (4 cards)
+- Animated chart skeleton with vertical bars
+- Gradient pulse effects
+- Loading indicator at bottom
+
+### Design Features
+
+All loading skeletons include:
+- **Gradient backgrounds**: Using accent colors (purple, pink, cyan)
+- **Pulse animations**: Smooth breathing effect
+- **Shimmer effects**: Light sweep across elements
+- **Staggered delays**: Creates flowing entrance animation
+- **Dark mode support**: Adapts colors for theme
+
+Error Boundaries
+---------------
+
+Error boundaries catch JavaScript errors in components and display fallback UI instead of crashing the app.
+
+### Implementation
+
+**Global Error** - [src/app/error.tsx](src/app/error.tsx)
+- Catches root-level application errors
+- Purple/pink/red gradient theme
+- Critical error icon with pulse animation
+- "Restart Application" and "Return Home" buttons
+- Error digest ID for debugging
+
+**Users Error** - [src/app/users/error.tsx](src/app/users/error.tsx)
+- Red/orange/pink gradient theme
+- Warning icon with glow effect
+- "Try Again" button calls `reset()` to re-render
+- "Go Home" fallback option
+- Displays error message and digest
+
+**Dashboard Error** - [src/app/dashboard/error.tsx](src/app/dashboard/error.tsx)
+- Orange/red gradient theme
+- Lightning bolt icon
+- "Retry Dashboard" button
+- "Back to Home" option
+- Console logging for monitoring
+
+### Error Boundary Features
+
+All error boundaries include:
+- **Animated backgrounds**: Gradient pulse effects
+- **Clear messaging**: User-friendly error descriptions
+- **Retry functionality**: `reset()` re-renders the route
+- **Navigation options**: Always provide escape route
+- **Error tracking**: Console logging (can integrate with Sentry/LogRocket)
+- **Error IDs**: Digest for correlation with logs
+- **Accessibility**: Semantic HTML and ARIA where appropriate
+
+Testing Error & Loading States
+------------------------------
+
+### Test Page
+
+Visit [/test-states](src/app/test-states/page.tsx) for an interactive testing dashboard with:
+- Links to test loading skeletons
+- Instructions for simulating errors
+- Network throttling guide
+- Code snippets for adding delays
+
+### Manual Testing Steps
+
+**1. Test Loading Skeletons**
+```bash
+# Start dev server
+npm run dev
+
+# Open Chrome DevTools (F12)
+# Network tab → Throttling → Slow 3G
+# Navigate to /users or /dashboard
+# Observe skeleton animations
+```
+
+**2. Simulate Errors**
+```typescript
+// Add to any page.tsx to trigger error boundary
+throw new Error('Test error message');
+```
+
+**3. Test Retry Functionality**
+- Trigger an error
+- Click "Try Again" button
+- Verify route re-renders
+- Check console for error logs
+
+**4. Add Artificial Delays**
+```typescript
+// Add delay to see loading state longer
+await new Promise(resolve => setTimeout(resolve, 2000));
+```
+
+Files Created
+-------------
+
+**Loading States**:
+- [src/app/loading.tsx](src/app/loading.tsx) — Root loading
+- [src/app/users/loading.tsx](src/app/users/loading.tsx) — Users page skeleton
+- [src/app/dashboard/loading.tsx](src/app/dashboard/loading.tsx) — Dashboard skeleton
+
+**Error Boundaries**:
+- [src/app/error.tsx](src/app/error.tsx) — Global error boundary
+- [src/app/users/error.tsx](src/app/users/error.tsx) — Users page errors
+- [src/app/dashboard/error.tsx](src/app/dashboard/error.tsx) — Dashboard errors
+
+**Testing**:
+- [src/app/test-states/page.tsx](src/app/test-states/page.tsx) — Interactive test dashboard
+
+How Next.js App Router Handles This
+-----------------------------------
+
+| File | Purpose | When It's Used |
+|------|---------|----------------|
+| `loading.tsx` | Shows while page/data is loading | Automatically during route transitions or Suspense boundaries |
+| `error.tsx` | Catches errors in page and child components | When any component throws an error |
+| `not-found.tsx` | 404 pages | When route doesn't exist or `notFound()` is called |
+
+**Automatic Behavior**:
+- Next.js wraps your page in a Suspense boundary
+- `loading.tsx` is shown during data fetching
+- `error.tsx` catches both client and server errors
+- Errors are isolated to route segments (don't crash whole app)
+
+Accessibility Considerations
+----------------------------
+
+**Loading States**:
+- Animations are smooth and not overly distracting
+- Skeleton shapes match real content for predictability
+- Screen readers can still navigate other parts of the app
+
+**Error States**:
+- Clear, human-readable error messages
+- Actionable buttons with descriptive labels
+- Keyboard accessible (all buttons focusable)
+- Sufficient color contrast for error icons and text
+
+Reflection
+----------
+
+**Challenges**: 
+- Balancing animation complexity with performance
+- Ensuring skeleton layouts match actual content structure
+- Making error messages helpful without exposing sensitive info
+
+**Solutions**: 
+- Used CSS animations for performance (GPU-accelerated)
+- Designed skeletons based on actual component layouts
+- Generic error messages with digest IDs for internal tracking
+
+**Results**: 
+- Users never see blank screens or confusing errors
+- Loading feels intentional and polished with gradient animations
+- Error recovery is clear with prominent retry buttons
+- App resilience increased — errors don't crash the entire application
+- User confidence improved through consistent, friendly feedback
+
 ### JWT Token Structure
 ```json
 {
