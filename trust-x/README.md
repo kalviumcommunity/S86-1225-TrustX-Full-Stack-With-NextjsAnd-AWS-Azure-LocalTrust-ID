@@ -3362,3 +3362,802 @@ The key insight is that **no single technique is sufficient**. XSS can bypass cl
 Regular security audits, penetration testing, and staying updated with OWASP guidelines are essential for maintaining a secure application. Use the test page at `/test-sanitization` to verify your sanitization is working correctly and to educate your team about common attack vectors.
 
 **Remember**: Security is not a feature you add at the end—it's a mindset you apply throughout development.
+
+
+---
+
+
+HTTPS Enforcement and Secure Headers
+=====================================
+
+This project implements comprehensive security headers and HTTPS enforcement following OWASP best practices to protect against man-in-the-middle (MITM) attacks, clickjacking, XSS, and unauthorized API access.
+
+Overview
+--------
+
+**What are Security Headers?**
+Security headers are HTTP response headers that tell browsers how to behave when handling your website's content. They act as the first line of defense against common web attacks.
+
+**Key Headers Implemented:**
+1. **HSTS (HTTP Strict Transport Security)**: Forces HTTPS connections
+2. **CSP (Content Security Policy)**: Controls allowed content sources  
+3. **CORS (Cross-Origin Resource Sharing)**: Restricts API access to trusted domains
+4. **X-Frame-Options**: Prevents clickjacking attacks
+5. **X-Content-Type-Options**: Prevents MIME sniffing
+6. **Permissions-Policy**: Restricts browser features
+
+Files
+-----
+
+### Configuration Files
+- `next.config.ts` — Security headers configuration for all routes
+- `src/middleware.ts` — Runtime CORS and security header enforcement
+
+### API Examples
+- `src/app/api/cors-example/route.ts` — Example API with CORS configuration
+
+### Testing
+- `src/app/test-headers/page.tsx` — Interactive security headers testing dashboard
+
+Security Headers Explained
+---------------------------
+
+### 1. HSTS (HTTP Strict Transport Security)
+
+**Purpose**: Forces browsers to always use HTTPS, preventing protocol downgrade attacks.
+
+**Configuration** (in [next.config.ts](next.config.ts)):
+
+```typescript
+{
+  key: 'Strict-Transport-Security',
+  value: 'max-age=63072000; includeSubDomains; preload',
+}
+```
+
+**Parameters**:
+- `max-age=63072000` → Valid for 2 years (730 days)
+- `includeSubDomains` → Applies to all subdomains (e.g., api.yourdomain.com)
+- `preload` → Eligible for browser HSTS preload list
+
+**Attack Prevented**: Man-in-the-Middle (MITM) attacks, SSL stripping
+
+**How It Works**:
+1. First visit: Browser receives HSTS header via HTTPS
+2. Subsequent visits: Browser automatically upgrades HTTP → HTTPS
+3. User cannot bypass HTTPS, even if they type `http://`
+
+**Testing**:
+```bash
+curl -I https://your-domain.com | grep -i strict-transport-security
+# Should return: Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+```
+
+---
+
+### 2. CSP (Content Security Policy)
+
+**Purpose**: Controls which sources browsers can load scripts, styles, images, and other resources from. Prevents XSS attacks.
+
+**Configuration** (in [next.config.ts](next.config.ts)):
+
+```typescript
+{
+  key: 'Content-Security-Policy',
+  value: [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://apis.google.com",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com data:",
+    "img-src 'self' data: https: blob:",
+    "connect-src 'self' https://apis.google.com",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "upgrade-insecure-requests",
+  ].join('; '),
+}
+```
+
+**Directives Explained**:
+
+- **`default-src 'self'`**: By default, only load resources from same origin
+- **`script-src`**: JavaScript sources
+  - `'self'` → Own domain
+  - `'unsafe-inline'` → Inline `<script>` tags (use sparingly)
+  - `'unsafe-eval'` → JavaScript `eval()` (needed for some frameworks)
+  - `https://apis.google.com` → Google APIs
+- **`style-src`**: CSS stylesheets
+  - `'self'` → Own domain
+  - `'unsafe-inline'` → Inline styles (needed for styled-components, etc.)
+  - `https://fonts.googleapis.com` → Google Fonts
+- **`font-src`**: Web fonts
+  - `'self'` → Own fonts
+  - `https://fonts.gstatic.com` → Google Fonts CDN
+  - `data:` → Data URIs for embedded fonts
+- **`img-src`**: Images
+  - `'self'` → Own images
+  - `data:` → Data URIs (base64 encoded images)
+  - `https:` → Any HTTPS source
+  - `blob:` → Blob URLs (for canvas/file uploads)
+- **`connect-src`**: Fetch/XHR/WebSocket connections
+  - `'self'` → Own API
+  - `https://apis.google.com` → External APIs
+- **`frame-ancestors 'none'`**: Disallow embedding in iframes (prevents clickjacking)
+- **`base-uri 'self'`**: Restrict `<base>` tag to same origin
+- **`form-action 'self'`**: Forms can only submit to same origin
+- **`upgrade-insecure-requests`**: Automatically upgrade HTTP → HTTPS
+
+**Attack Prevented**: Cross-Site Scripting (XSS), data exfiltration, clickjacking
+
+**Customization Guide**:
+
+```typescript
+// For Next.js with third-party analytics (e.g., Google Analytics)
+"script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.google-analytics.com"
+
+// For external images (e.g., user uploads from S3)
+"img-src 'self' data: https: https://your-bucket.s3.amazonaws.com"
+
+// For WebSocket connections
+"connect-src 'self' wss://your-api.com"
+```
+
+**Testing**:
+Visit `/test-headers` and check browser console for CSP violations. Violations indicate blocked resources.
+
+---
+
+### 3. CORS (Cross-Origin Resource Sharing)
+
+**Purpose**: Controls which domains can access your API. Prevents unauthorized cross-origin requests.
+
+**Configuration** (in [next.config.ts](next.config.ts)):
+
+```typescript
+// API routes with CORS headers
+{
+  source: '/api/:path*',
+  headers: [
+    {
+      key: 'Access-Control-Allow-Origin',
+      value: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+    },
+    {
+      key: 'Access-Control-Allow-Methods',
+      value: 'GET, POST, PUT, DELETE, OPTIONS, PATCH',
+    },
+    {
+      key: 'Access-Control-Allow-Headers',
+      value: 'Content-Type, Authorization, X-Requested-With, X-CSRF-Token',
+    },
+    {
+      key: 'Access-Control-Allow-Credentials',
+      value: 'true',
+    },
+    {
+      key: 'Access-Control-Max-Age',
+      value: '86400', // 24 hours
+    },
+  ],
+}
+```
+
+**Runtime CORS** (in [src/middleware.ts](src/middleware.ts)):
+
+```typescript
+const ALLOWED_ORIGINS = [
+  process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+  'https://your-production-domain.com',
+  'https://your-staging-domain.com',
+];
+
+// Check origin against allowlist
+if (origin && ALLOWED_ORIGINS.includes(origin)) {
+  response.headers.set('Access-Control-Allow-Origin', origin);
+  response.headers.set('Access-Control-Allow-Credentials', 'true');
+}
+```
+
+**Headers Explained**:
+
+- **`Access-Control-Allow-Origin`**: Which domain can access the API
+  - ✅ Specific domain: `https://yourdomain.com`
+  - ❌ **NEVER use `*` in production** (allows any domain!)
+- **`Access-Control-Allow-Methods`**: Allowed HTTP methods
+- **`Access-Control-Allow-Headers`**: Allowed request headers
+- **`Access-Control-Allow-Credentials`**: Allow cookies/auth headers (`true` or `false`)
+- **`Access-Control-Max-Age`**: Cache preflight response for 24 hours
+
+**Attack Prevented**: Unauthorized API access, CSRF (when combined with token validation)
+
+**Example API Route with CORS** ([src/app/api/cors-example/route.ts](src/app/api/cors-example/route.ts)):
+
+```typescript
+export async function GET(req: NextRequest) {
+  const origin = req.headers.get('origin');
+  
+  const data = {
+    message: 'CORS configured securely',
+    origin: origin || 'same-origin',
+    allowed: origin ? ALLOWED_ORIGINS.includes(origin) : true,
+  };
+  
+  const response = sendSuccess(data, 'CORS example response');
+  
+  // Set CORS headers
+  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    response.headers.set('Access-Control-Allow-Origin', origin);
+    response.headers.set('Access-Control-Allow-Credentials', 'true');
+  }
+  
+  return response;
+}
+```
+
+**Testing CORS**:
+
+From a different domain (or using a tool like Postman):
+
+```javascript
+fetch('https://your-api.com/api/cors-example', {
+  method: 'GET',
+  credentials: 'include', // Important for cookies
+  headers: {
+    'Content-Type': 'application/json',
+  },
+})
+.then(res => res.json())
+.then(data => console.log(data))
+.catch(err => console.error('CORS error:', err));
+```
+
+---
+
+### 4. X-Frame-Options
+
+**Purpose**: Prevents your site from being embedded in iframes (prevents clickjacking attacks).
+
+**Configuration**:
+
+```typescript
+{
+  key: 'X-Frame-Options',
+  value: 'DENY',
+}
+```
+
+**Options**:
+- `DENY` → Cannot be embedded in any iframe (most secure)
+- `SAMEORIGIN` → Can only be embedded by same domain
+- `ALLOW-FROM https://trusted.com` → Allow specific domain (deprecated)
+
+**Attack Prevented**: Clickjacking (attacker tricks users into clicking hidden buttons)
+
+---
+
+### 5. X-Content-Type-Options
+
+**Purpose**: Prevents browsers from MIME-sniffing (guessing content type).
+
+**Configuration**:
+
+```typescript
+{
+  key: 'X-Content-Type-Options',
+  value: 'nosniff',
+}
+```
+
+**Attack Prevented**: MIME confusion attacks (e.g., upload malicious `.jpg` that browser executes as JavaScript)
+
+---
+
+### 6. X-XSS-Protection
+
+**Purpose**: Enables browser's built-in XSS filter (legacy but still useful).
+
+**Configuration**:
+
+```typescript
+{
+  key: 'X-XSS-Protection',
+  value: '1; mode=block',
+}
+```
+
+**Modes**:
+- `0` → Disable filter
+- `1` → Enable filter, sanitize page
+- `1; mode=block` → Enable filter, block page entirely if XSS detected (recommended)
+
+---
+
+### 7. Referrer-Policy
+
+**Purpose**: Controls how much referrer information is sent with requests.
+
+**Configuration**:
+
+```typescript
+{
+  key: 'Referrer-Policy',
+  value: 'strict-origin-when-cross-origin',
+}
+```
+
+**Policies**:
+- `no-referrer` → Never send referrer
+- `same-origin` → Send referrer only to same origin
+- `strict-origin-when-cross-origin` → Send full URL to same origin, origin only to HTTPS cross-origin (recommended)
+
+**Privacy Benefit**: Prevents leaking sensitive URLs (e.g., `/reset-password?token=...`)
+
+---
+
+### 8. Permissions-Policy
+
+**Purpose**: Restricts browser features (camera, microphone, geolocation, etc.).
+
+**Configuration**:
+
+```typescript
+{
+  key: 'Permissions-Policy',
+  value: 'geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=(), speaker=()',
+}
+```
+
+**Syntax**:
+- `feature=()` → Disabled for all origins
+- `feature=(self)` → Allowed for same origin only
+- `feature=(self "https://trusted.com")` → Allowed for specific domains
+
+**Attack Prevented**: Reduces attack surface by disabling unnecessary features
+
+---
+
+### 9. Cross-Origin Policies
+
+**COEP (Cross-Origin-Embedder-Policy)**:
+
+```typescript
+{
+  key: 'Cross-Origin-Embedder-Policy',
+  value: 'require-corp',
+}
+```
+
+**COOP (Cross-Origin-Opener-Policy)**:
+
+```typescript
+{
+  key: 'Cross-Origin-Opener-Policy',
+  value: 'same-origin',
+}
+```
+
+**CORP (Cross-Origin-Resource-Policy)**:
+
+```typescript
+{
+  key: 'Cross-Origin-Resource-Policy',
+  value: 'same-origin',
+}
+```
+
+**Purpose**: Isolate browsing context, enable `SharedArrayBuffer` and high-resolution timers securely.
+
+---
+
+Testing & Verification
+-----------------------
+
+### 1. Local Testing
+
+**Visit the test page**: http://localhost:3000/test-headers
+
+The test page will:
+- ✅ Verify all security headers are present
+- ✅ Test CORS configuration with POST request
+- ✅ Display all response headers
+- ✅ Provide security scan tool links
+
+**Browser DevTools**:
+1. Open Chrome DevTools (F12)
+2. Go to Network tab
+3. Refresh page
+4. Click on any request
+5. Go to "Headers" tab → "Response Headers"
+6. Verify headers are present
+
+### 2. Online Security Scanners
+
+**Security Headers**:
+- Visit: https://securityheaders.com
+- Enter your deployed URL
+- Aim for grade A or A+
+
+**Mozilla Observatory**:
+- Visit: https://observatory.mozilla.org
+- Enter your deployed URL
+- Fix any reported issues
+
+**SSL Labs**:
+- Visit: https://www.ssllabs.com/ssltest/
+- Test HTTPS/TLS configuration
+- Aim for grade A or A+
+
+### 3. Command Line Testing
+
+```bash
+# Test HSTS
+curl -I https://your-domain.com | grep -i strict-transport-security
+
+# Test CSP
+curl -I https://your-domain.com | grep -i content-security-policy
+
+# Test all headers
+curl -I https://your-domain.com
+
+# Test CORS
+curl -H "Origin: https://example.com" \
+     -H "Access-Control-Request-Method: POST" \
+     -H "Access-Control-Request-Headers: Content-Type" \
+     -X OPTIONS \
+     https://your-domain.com/api/cors-example
+```
+
+---
+
+Deployment Considerations
+--------------------------
+
+### Environment Variables
+
+Create `.env.local`:
+
+```bash
+# CORS Configuration
+NEXT_PUBLIC_APP_URL=https://your-production-domain.com
+
+# For staging environment
+# NEXT_PUBLIC_APP_URL=https://your-staging-domain.com
+```
+
+### Vercel Deployment
+
+Vercel automatically handles HTTPS with Let's Encrypt certificates. Headers are configured in `next.config.ts` and work out-of-the-box.
+
+**Additional Vercel Configuration** (optional `vercel.json`):
+
+```json
+{
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Custom-Header",
+          "value": "your-value"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### AWS Deployment
+
+If deploying to AWS (EC2, ECS, Elastic Beanstalk):
+
+1. **Use Application Load Balancer (ALB)** for HTTPS termination
+2. **Configure ACM (AWS Certificate Manager)** for SSL certificates
+3. **Add HSTS header in ALB or NGINX**:
+
+```nginx
+# NGINX configuration
+add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
+```
+
+### Custom Server (Express.js)
+
+If using a custom Next.js server:
+
+```javascript
+// server.js
+const express = require('express');
+const next = require('next');
+const helmet = require('helmet');
+
+const dev = process.env.NODE_ENV !== 'production';
+const app = next({ dev });
+const handle = app.getRequestHandler();
+
+app.prepare().then(() => {
+  const server = express();
+  
+  // Use Helmet for security headers
+  server.use(helmet({
+    hsts: {
+      maxAge: 63072000,
+      includeSubDomains: true,
+      preload: true,
+    },
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        // ... other directives
+      },
+    },
+  }));
+  
+  server.all('*', (req, res) => {
+    return handle(req, res);
+  });
+  
+  server.listen(3000);
+});
+```
+
+---
+
+HTTPS Enforcement Best Practices
+---------------------------------
+
+### 1. Always Use HTTPS in Production
+
+❌ **Bad**: Mixed HTTP/HTTPS content
+
+```html
+<script src="http://example.com/script.js"></script>
+<img src="http://example.com/image.jpg">
+```
+
+✅ **Good**: All HTTPS or protocol-relative
+
+```html
+<script src="https://example.com/script.js"></script>
+<img src="https://example.com/image.jpg">
+<!-- OR -->
+<script src="//example.com/script.js"></script>
+```
+
+### 2. Redirect HTTP → HTTPS
+
+Configure in NGINX or load balancer:
+
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;
+    return 301 https://$server_name$request_uri;
+}
+```
+
+Or in Next.js middleware:
+
+```typescript
+export function middleware(req: NextRequest) {
+  const proto = req.headers.get('x-forwarded-proto');
+  
+  if (proto === 'http') {
+    return NextResponse.redirect(
+      `https://${req.headers.get('host')}${req.nextUrl.pathname}`,
+      301
+    );
+  }
+  
+  return NextResponse.next();
+}
+```
+
+### 3. HSTS Preload List
+
+To add your domain to browser HSTS preload lists:
+
+1. Visit: https://hstspreload.org/
+2. Enter your domain
+3. Check requirements:
+   - ✅ Valid HTTPS certificate
+   - ✅ HSTS header with `preload` directive
+   - ✅ `max-age` at least 1 year (31536000 seconds)
+   - ✅ `includeSubDomains` directive
+4. Submit domain
+
+**Benefits**: Even first visit is HTTPS (no HTTP → HTTPS redirect needed)
+
+---
+
+CSP Impact on Third-Party Integrations
+---------------------------------------
+
+### Common Issues & Solutions
+
+**Problem**: Google Analytics blocked by CSP
+
+**Solution**: Add Google Analytics domains to CSP:
+
+```typescript
+"script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.google-analytics.com",
+"connect-src 'self' https://www.google-analytics.com",
+"img-src 'self' data: https://www.google-analytics.com",
+```
+
+**Problem**: Inline styles blocked (styled-components, Emotion)
+
+**Solution**: Use `'unsafe-inline'` or generate nonce:
+
+```typescript
+// With nonce (more secure)
+"style-src 'self' 'nonce-{random}'",
+
+// In your component
+<style nonce={nonce}>
+  .my-class { color: red; }
+</style>
+```
+
+**Problem**: Font Awesome icons not loading
+
+**Solution**: Add Font Awesome CDN:
+
+```typescript
+"font-src 'self' https://use.fontawesome.com",
+"style-src 'self' 'unsafe-inline' https://use.fontawesome.com",
+```
+
+---
+
+CORS Impact on API Access
+--------------------------
+
+### Development vs Production
+
+**Development** (`http://localhost:3000`):
+
+```typescript
+const ALLOWED_ORIGINS = [
+  'http://localhost:3000',
+  'http://localhost:3001', // Additional dev ports
+];
+```
+
+**Production**:
+
+```typescript
+const ALLOWED_ORIGINS = [
+  'https://your-domain.com',
+  'https://www.your-domain.com',
+  'https://api.your-domain.com',
+];
+```
+
+### Mobile App API Access
+
+If your Next.js app serves a mobile app:
+
+**Option 1**: Use API subdomain with CORS
+
+```typescript
+const ALLOWED_ORIGINS = [
+  'https://your-domain.com',
+  'capacitor://localhost', // iOS Capacitor
+  'http://localhost',      // Android local
+];
+```
+
+**Option 2**: Use API key authentication (no CORS needed)
+
+```typescript
+// In API route
+const apiKey = req.headers.get('x-api-key');
+if (apiKey !== process.env.API_KEY) {
+  return sendError('Invalid API key', ERROR_CODES.UNAUTHORIZED, 401);
+}
+```
+
+---
+
+Security Headers Checklist
+---------------------------
+
+Before deploying to production:
+
+- ✅ **HSTS** configured with `max-age` ≥ 1 year
+- ✅ **HSTS** includes `includeSubDomains` and `preload`
+- ✅ **CSP** configured with restrictive policy
+- ✅ **CSP** allows only trusted domains (no `'unsafe-*'` unless necessary)
+- ✅ **CORS** restricts origins to trusted domains (never `*` in production)
+- ✅ **X-Frame-Options** set to `DENY` or `SAMEORIGIN`
+- ✅ **X-Content-Type-Options** set to `nosniff`
+- ✅ **X-XSS-Protection** set to `1; mode=block`
+- ✅ **Referrer-Policy** configured
+- ✅ **Permissions-Policy** restricts unnecessary features
+- ✅ All requests redirected from HTTP → HTTPS
+- ✅ Valid SSL/TLS certificate installed
+- ✅ Security headers tested with online scanners
+- ✅ Browser console checked for CSP violations
+- ✅ CORS tested from allowed/disallowed origins
+
+---
+
+Troubleshooting
+---------------
+
+### Issue: CSP violations in browser console
+
+**Error**: `Refused to load the script ... because it violates the following Content Security Policy directive`
+
+**Solution**:
+1. Check which resource is blocked (URL in error message)
+2. Add domain to appropriate CSP directive:
+   - Scripts → `script-src`
+   - Styles → `style-src`
+   - Images → `img-src`
+   - API calls → `connect-src`
+
+### Issue: CORS error "No 'Access-Control-Allow-Origin' header"
+
+**Error**: `Access to fetch at '...' from origin '...' has been blocked by CORS policy`
+
+**Solution**:
+1. Verify origin is in `ALLOWED_ORIGINS` array
+2. Check middleware is setting CORS headers
+3. For credentials, ensure `Access-Control-Allow-Credentials: true`
+4. Test with curl:
+   ```bash
+   curl -H "Origin: https://your-domain.com" https://your-api.com/api/test
+   ```
+
+### Issue: Fonts not loading (CORS or CSP)
+
+**Error**: Font blocked by CSP or CORS
+
+**Solution**:
+```typescript
+// CSP
+"font-src 'self' https://fonts.gstatic.com data:",
+
+// If self-hosted, add CORS header to font files
+// In next.config.ts:
+{
+  source: '/fonts/:path*',
+  headers: [
+    {
+      key: 'Access-Control-Allow-Origin',
+      value: '*', // Fonts can be public
+    },
+  ],
+}
+```
+
+### Issue: Third-party scripts not working
+
+**Error**: Analytics, chat widgets, or payment forms blocked
+
+**Solution**:
+1. Add all required domains to CSP
+2. For payment forms (Stripe, PayPal), check their CSP requirements
+3. Consider using `report-uri` to monitor violations:
+   ```typescript
+   "report-uri https://your-domain.com/api/csp-report",
+   ```
+
+---
+
+Reflection
+----------
+
+Security headers are like invisible bodyguards—they don't change your UI, but they protect users every time your app loads. HTTPS enforcement with HSTS ensures all communication is encrypted, preventing eavesdropping and tampering. CSP acts as a strict bouncer, only allowing trusted content to enter your application.
+
+The key insight: **Balance security with flexibility**. A too-strict CSP can break third-party integrations (analytics, fonts, CDNs), while too-loose CSP offers minimal protection. Start with a restrictive policy, test thoroughly, and gradually add trusted domains as needed.
+
+CORS is often misunderstood—using `Access-Control-Allow-Origin: *` defeats the entire purpose. Always restrict to specific, trusted origins in production. Remember: CORS is not a security feature for your server (server executes the request regardless); it's a browser feature that prevents malicious websites from making requests on behalf of users.
+
+**Pro Tip**: Security headers work best in layers. Even if CSP is bypassed, HSTS ensures HTTPS. Even if CORS is bypassed (server-side attack), authentication tokens protect your API. Even if XSS occurs, X-Frame-Options prevents clickjacking. Defense in depth is key.
+
+Use the test page at `/test-headers` to verify your configuration, and regularly scan your deployed site with tools like SecurityHeaders.com and Mozilla Observatory to maintain an A+ security grade.
+
+**Remember**: HTTPS is not optional—it's mandatory for modern web applications. Even simple static sites should use HTTPS, as browsers now flag HTTP sites as "Not Secure."
