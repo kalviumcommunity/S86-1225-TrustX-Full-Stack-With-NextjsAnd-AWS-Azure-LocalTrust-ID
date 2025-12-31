@@ -3,8 +3,11 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
+  // Connection pool settings for cloud databases
+  // Adjust based on your database tier and application load
+  // directUrl = env("DIRECT_URL") // Optional: for migrations on serverless platforms
 }
 
 model User {
