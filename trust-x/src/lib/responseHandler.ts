@@ -19,9 +19,11 @@ export const sendSuccess = (
 export const sendError = (
   message = 'Something went wrong',
   code = 'INTERNAL_ERROR',
-  status = 500,
+  status: string | number = 500,
   details?: unknown
 ) => {
+  const statusCode = typeof status === 'string' ? parseInt(status, 10) : status;
+  
   return NextResponse.json(
     {
       success: false,
@@ -29,7 +31,7 @@ export const sendError = (
       error: { code, details },
       timestamp: new Date().toISOString(),
     },
-    { status }
+    { status: isNaN(statusCode) ? 500 : statusCode }
   );
 };
 
