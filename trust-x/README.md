@@ -4161,3 +4161,1848 @@ CORS is often misunderstood—using `Access-Control-Allow-Origin: *` defeats the
 Use the test page at `/test-headers` to verify your configuration, and regularly scan your deployed site with tools like SecurityHeaders.com and Mozilla Observatory to maintain an A+ security grade.
 
 **Remember**: HTTPS is not optional—it's mandatory for modern web applications. Even simple static sites should use HTTPS, as browsers now flag HTTP sites as "Not Secure."
+---
+
+# Cloud Database Configuration (RDS / Azure SQL)
+
+## Overview
+
+This guide covers provisioning and configuring managed PostgreSQL databases using **AWS RDS** or **Azure Database for PostgreSQL** and connecting them securely to your Next.js application. Managed databases handle operational tasks like automated backups, patch management, scaling, and security, allowing you to focus on development rather than database administration.
+
+## Table of Contents
+
+- [Why Managed Databases?](#why-managed-databases)
+- [Provider Comparison](#provider-comparison)
+- [Provisioning AWS RDS PostgreSQL](#provisioning-aws-rds-postgresql)
+- [Provisioning Azure Database for PostgreSQL](#provisioning-azure-database-for-postgresql)
+- [Network Security Configuration](#network-security-configuration)
+- [Connecting Your Next.js App](#connecting-your-nextjs-app)
+- [Connection Management & Pooling](#connection-management--pooling)
+- [Health Checks & Monitoring](#health-checks--monitoring)
+- [Backup & Disaster Recovery](#backup--disaster-recovery)
+- [Performance Optimization](#performance-optimization)
+- [Security Best Practices](#security-best-practices)
+- [Cost Optimization](#cost-optimization)
+- [Troubleshooting](#troubleshooting)
+- [Verification & Testing](#verification--testing)
+- [Reflection](#reflection-1)
+
+---
+
+## Why Managed Databases?
+
+Managed database services like AWS RDS and Azure Database for PostgreSQL provide:
+
+### ✅ Operational Benefits
+- **Automated Backups**: Daily snapshots with point-in-time recovery
+- **Patch Management**: Automatic security updates and version upgrades
+- **High Availability**: Multi-AZ deployments with automatic failover
+- **Monitoring**: Built-in metrics, logs, and alerting
+- **Scalability**: Vertical (instance size) and horizontal (read replicas) scaling
+
+### ✅ Security Benefits
+- **Network Isolation**: VPC/VNet integration, private endpoints
+- **Encryption**: At-rest (storage) and in-transit (SSL/TLS) encryption
+- **Access Control**: IAM authentication, IP allowlisting, firewall rules
+- **Compliance**: SOC 2, HIPAA, PCI-DSS certifications
+
+### ✅ Developer Benefits
+- **No DB Administration**: No need to manage servers, updates, or backups
+- **Quick Provisioning**: Launch production-ready databases in minutes
+- **Connection Pooling**: Built-in or easy integration with poolers
+- **Migration Tools**: Import from local databases or other cloud providers
+
+---
+
+## Provider Comparison
+
+| Feature | AWS RDS PostgreSQL | Azure Database for PostgreSQL |
+|---------|-------------------|------------------------------|
+| **Pricing (min)** | ~$15/month (t3.micro) | ~$15/month (B1ms) |
+| **Free Tier** | 750 hours/month (12 months) | None (but low-cost tiers) |
+| **Min Storage** | 20 GB (gp3) | 32 GB (flexible server) |
+| **Backup Retention** | 1-35 days | 1-35 days |
+| **High Availability** | Multi-AZ (extra cost) | Zone-redundant (extra cost) |
+| **Read Replicas** | Up to 15 | Up to 5 |
+| **SSL/TLS** | Required (default) | Required (default) |
+| **Monitoring** | CloudWatch | Azure Monitor |
+| **IAM Auth** | Yes | Yes (Azure AD) |
+| **Regions** | 30+ | 60+ |
+| **Best For** | AWS-native apps, existing AWS infra | Azure-native apps, Microsoft stack |
+
+**Recommendation**:
+- **AWS RDS**: Choose if already using AWS services (EC2, Lambda, S3), or deploying on Vercel (better egress costs)
+- **Azure PostgreSQL**: Choose if using Azure services (App Service, Functions), or Microsoft ecosystem (AAD, Power BI)
+
+---
+
+## Provisioning AWS RDS PostgreSQL
+
+### Option 1: Automated Script (Recommended)
+
+We provide a comprehensive bash script that automates the entire setup process.
+
+**Prerequisites**:
+- AWS CLI installed and configured (`aws configure`)
+- `jq` installed (`sudo apt-get install jq` or `brew install jq`)
+- Appropriate IAM permissions for RDS and VPC operations
+
+**Run the setup script**:
+
+```bash
+# Make script executable
+chmod +x scripts/setup-aws-rds.sh
+
+# Run with defaults (us-east-1, t3.micro, 20GB storage)
+./scripts/setup-aws-rds.sh
+
+# Or customize with environment variables
+DB_INSTANCE_IDENTIFIER=trustx-prod-db \
+DB_NAME=trustxdb \
+AWS_REGION=us-west-2 \
+DB_INSTANCE_CLASS=db.t3.small \
+./scripts/setup-aws-rds.sh
+```
+
+**What the script does**:
+1. ✅ Verifies AWS credentials and permissions
+2. ✅ Generates a secure master password (30 characters)
+3. ✅ Detects your public IP for firewall rules
+4. ✅ Creates VPC security group with PostgreSQL access
+5. ✅ Provisions RDS PostgreSQL instance (5-10 minutes)
+6. ✅ Configures automated backups (7 days retention)
+7. ✅ Enables CloudWatch logs for monitoring
+8. ✅ Enables encryption at rest
+9. ✅ Enables deletion protection
+10. ✅ Saves credentials to a secure file
+
+**Output**:
+
+```
+========================================
+✓ AWS RDS Setup Complete!
+========================================
+
+Your DATABASE_URL:
+postgresql://adminuser:****@trustx-db.abc123.us-east-1.rds.amazonaws.com:5432/trustxdb?schema=public&sslmode=require
+
+Quick Start Commands:
+  1. Add to .env.local:     echo 'DATABASE_URL="..."' >> .env.local
+  2. Generate Prisma:       npx prisma generate
+  3. Run migrations:        npx prisma migrate deploy
+  4. Test connection:       npm run test:db
+```
+
+### Option 2: Manual AWS Console Setup
+
+**Step 1: Navigate to RDS**
+1. Go to [AWS Console](https://console.aws.amazon.com/rds/) → Databases → Create Database
+
+**Step 2: Configure Database**
+- **Engine**: PostgreSQL
+- **Version**: 16.1 (latest stable)
+- **Template**: Free tier (dev/test) or Production
+- **DB Instance Identifier**: `trustx-db`
+- **Master Username**: `adminuser`
+- **Master Password**: Generate strong password (use AWS Secrets Manager)
+
+**Step 3: Instance Configuration**
+- **DB Instance Class**: `db.t3.micro` (free tier) or `db.t3.small` (production)
+- **Storage**: 20 GB (gp3 - fastest), auto-scaling enabled
+- **Storage Encryption**: Enabled (use default AWS KMS key)
+
+**Step 4: Connectivity**
+- **VPC**: Default VPC (or create custom VPC for production)
+- **Public Access**: Yes (for initial testing only)
+- **Security Group**: Create new → Name: `trustx-db-sg`
+- **Availability Zone**: No preference (or choose for latency)
+
+**Step 5: Database Authentication**
+- **Password authentication**: Enabled
+- **IAM database authentication**: Enabled (optional, for serverless)
+
+**Step 6: Additional Configuration**
+- **Initial Database Name**: `trustxdb`
+- **Backup Retention**: 7 days (minimum for production)
+- **Backup Window**: 03:00-04:00 UTC (low traffic time)
+- **Maintenance Window**: Sunday 04:00-05:00 UTC
+- **Enable CloudWatch Logs**: PostgreSQL logs
+- **Deletion Protection**: Enabled (prevents accidental deletion)
+
+**Step 7: Create Database**
+- Review settings → Create Database
+- Wait 5-10 minutes for provisioning
+
+**Step 8: Configure Security Group**
+1. Go to Security Groups → Find `trustx-db-sg`
+2. Edit Inbound Rules → Add Rule:
+   - **Type**: PostgreSQL
+   - **Protocol**: TCP
+   - **Port**: 5432
+   - **Source**: My IP (your current IP) OR Custom (your app server IP)
+
+**Step 9: Get Connection Details**
+1. Click on your database → Connectivity & Security
+2. Copy **Endpoint**: `trustx-db.abc123.us-east-1.rds.amazonaws.com`
+3. Note **Port**: `5432`
+
+---
+
+## Provisioning Azure Database for PostgreSQL
+
+### Option 1: Automated Script (Recommended)
+
+**Prerequisites**:
+- Azure CLI installed (`az cli`)
+- Logged in to Azure (`az login`)
+- `jq` installed
+- Appropriate permissions for resource creation
+
+**Run the setup script**:
+
+```bash
+# Make script executable
+chmod +x scripts/setup-azure-postgresql.sh
+
+# Run with defaults (eastus, B1ms, 32GB storage)
+./scripts/setup-azure-postgresql.sh
+
+# Or customize with environment variables
+RESOURCE_GROUP=trustx-prod-rg \
+SERVER_NAME=trustx-prod-db \
+DB_NAME=trustxdb \
+LOCATION=westus2 \
+SKU_NAME=Standard_B2s \
+./scripts/setup-azure-postgresql.sh
+```
+
+**What the script does**:
+1. ✅ Verifies Azure login and subscription
+2. ✅ Generates a secure admin password
+3. ✅ Detects your public IP for firewall rules
+4. ✅ Creates resource group (if not exists)
+5. ✅ Provisions Azure Database for PostgreSQL Flexible Server (5-10 minutes)
+6. ✅ Creates database
+7. ✅ Configures firewall rules (your IP + Azure services)
+8. ✅ Enables SSL/TLS enforcement
+9. ✅ Optimizes server parameters (max_connections, shared_buffers)
+10. ✅ Saves credentials to a secure file
+
+**Output**:
+
+```
+========================================
+✓ Azure PostgreSQL Setup Complete!
+========================================
+
+Your DATABASE_URL:
+postgresql://adminuser:****@trustx-db.postgres.database.azure.com:5432/trustxdb?schema=public&sslmode=require
+
+Quick Start Commands:
+  1. Add to .env.local:     echo 'DATABASE_URL="..."' >> .env.local
+  2. Generate Prisma:       npx prisma generate
+  3. Run migrations:        npx prisma migrate deploy
+  4. Test connection:       npm run test:db
+```
+
+### Option 2: Manual Azure Portal Setup
+
+**Step 1: Navigate to Azure Portal**
+1. Go to [Azure Portal](https://portal.azure.com) → Create a resource → Databases → Azure Database for PostgreSQL
+
+**Step 2: Basics**
+- **Subscription**: Your subscription
+- **Resource Group**: Create new → `trustx-rg`
+- **Server Name**: `trustx-db-server` (must be globally unique)
+- **Region**: East US (or closest to your users)
+- **Workload Type**: Development or Production
+- **Compute + Storage**: Configure:
+  - **Tier**: Burstable (B1ms - $15/month) or General Purpose
+  - **Compute**: 1 vCore, 2 GB RAM
+  - **Storage**: 32 GB (minimum)
+  - **Backup Retention**: 7 days
+
+**Step 3: Authentication**
+- **Authentication Method**: PostgreSQL authentication only
+- **Admin Username**: `adminuser`
+- **Password**: Generate strong password (20+ characters)
+
+**Step 4: Networking**
+- **Connectivity**: Public access (0.0.0.0-255.255.255.255) for testing
+- **Firewall Rules**: Add current client IP address
+- **Allow Azure services**: Yes
+
+**Step 5: Security**
+- **SSL Enforcement**: Enabled (default)
+- **Minimal TLS Version**: 1.2
+
+**Step 6: Tags**
+- **Project**: TrustX
+- **Environment**: Production
+
+**Step 7: Review + Create**
+- Validate → Create
+- Wait 5-10 minutes for deployment
+
+**Step 8: Create Database**
+1. Go to your server → Databases → Add
+2. **Name**: `trustxdb`
+3. **Charset**: UTF8 (default)
+4. **Collation**: en_US.utf8 (default)
+
+**Step 9: Get Connection Details**
+1. Server → Overview → Copy **Server name**: `trustx-db-server.postgres.database.azure.com`
+2. Note **Port**: `5432`
+
+---
+
+## Network Security Configuration
+
+### Security Group Rules (AWS) / Firewall Rules (Azure)
+
+**For Development**:
+```
+Source: Your IP address (e.g., 203.0.113.45/32)
+Port: 5432
+Protocol: TCP
+```
+
+**For Production** (recommended):
+```
+Source: Application server IP or VPC CIDR
+Port: 5432
+Protocol: TCP
+```
+
+### Best Practices
+
+✅ **Never use `0.0.0.0/0` (all IPs) in production**
+
+❌ **Bad** (allows any IP to connect):
+```bash
+# AWS
+aws ec2 authorize-security-group-ingress \
+  --group-id sg-xxx \
+  --cidr 0.0.0.0/0 \
+  --protocol tcp \
+  --port 5432
+```
+
+✅ **Good** (specific IP allowlist):
+```bash
+# AWS - Add your app server IP
+aws ec2 authorize-security-group-ingress \
+  --group-id sg-xxx \
+  --cidr 10.0.1.5/32 \
+  --protocol tcp \
+  --port 5432
+
+# Azure - Add your app server IP
+az postgres flexible-server firewall-rule create \
+  --resource-group trustx-rg \
+  --name trustx-db-server \
+  --rule-name "AppServerAccess" \
+  --start-ip-address 10.0.1.5 \
+  --end-ip-address 10.0.1.5
+```
+
+### Private Access (Highly Recommended for Production)
+
+**AWS RDS - VPC Peering**:
+1. Create RDS in private subnet (no public access)
+2. Deploy app in same VPC or use VPC peering
+3. Use private endpoint for connection
+
+**Azure PostgreSQL - Private Endpoint**:
+1. Create Private Endpoint for database
+2. Database accessible only from VNet
+3. No public IP exposure
+
+**Benefits**:
+- ✅ Database never exposed to internet
+- ✅ No firewall rules needed
+- ✅ Lower latency (same network)
+- ✅ Reduced attack surface
+
+---
+
+## Connecting Your Next.js App
+
+### Step 1: Update Prisma Schema
+
+The schema is already configured for PostgreSQL:
+
+```prisma
+// prisma/schema.prisma
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+```
+
+### Step 2: Configure Environment Variables
+
+Create or update `.env.local`:
+
+**AWS RDS**:
+```bash
+DATABASE_URL="postgresql://adminuser:YOUR_PASSWORD@trustx-db.abc123.us-east-1.rds.amazonaws.com:5432/trustxdb?schema=public&sslmode=require"
+```
+
+**Azure PostgreSQL**:
+```bash
+DATABASE_URL="postgresql://adminuser:YOUR_PASSWORD@trustx-db-server.postgres.database.azure.com:5432/trustxdb?schema=public&sslmode=require"
+```
+
+**Connection String Format**:
+```
+postgresql://USERNAME:PASSWORD@HOST:PORT/DATABASE?schema=public&sslmode=require
+```
+
+**Important Parameters**:
+- `schema=public`: Use the public schema (default for PostgreSQL)
+- `sslmode=require`: Enforce SSL/TLS encryption (mandatory for cloud databases)
+- `connection_limit=10`: Max connections in pool (optional)
+- `pool_timeout=10`: Pool timeout in seconds (optional)
+
+### Step 3: Generate Prisma Client
+
+```bash
+npx prisma generate
+```
+
+This creates the Prisma Client with types based on your schema.
+
+### Step 4: Run Database Migrations
+
+**Deploy existing migrations**:
+```bash
+npx prisma migrate deploy
+```
+
+**Create new migration** (if schema changed):
+```bash
+npx prisma migrate dev --name add_cloud_database
+```
+
+### Step 5: Test Connection
+
+```bash
+npm run test:db
+```
+
+This runs a comprehensive connection test that checks:
+- ✅ Basic connectivity
+- ✅ Database version and info
+- ✅ Table access permissions
+- ✅ Connection pool status
+- ✅ SSL/TLS configuration
+- ✅ Write operations
+
+**Expected Output**:
+```
+========================================
+DATABASE CONNECTION TEST
+========================================
+
+✓ DATABASE_URL is configured
+  Host: trustx-db.abc123.us-east-1.rds.amazonaws.com
+  Port: 5432
+  Database: trustxdb
+  User: adminuser
+  SSL: require
+
+========================================
+TEST 1: Basic Connectivity
+========================================
+✓ Connected successfully in 245ms
+
+========================================
+TEST 2: Database Information
+========================================
+✓ PostgreSQL Version: PostgreSQL 16.1 on x86_64-pc-linux-gnu
+✓ Current Database: trustxdb
+✓ Connection Pool:
+  Current: 3
+  Maximum: 100
+  Usage: 3.0%
+
+========================================
+TEST 3: Schema Access
+========================================
+✓ Found 8 table(s) in public schema:
+  - User
+  - Project
+  - Task
+  - Product
+  - Order
+  - Payment
+  - File
+  - _prisma_migrations
+
+========================================
+TEST 4: Security Configuration
+========================================
+✓ SSL/TLS is enabled
+  Version: TLSv1.3
+  Cipher: ECDHE-RSA-AES256-GCM-SHA384
+
+========================================
+TEST 5: Write Operations
+========================================
+✓ Write operations are working
+✓ Read operations are working
+✓ Table creation/deletion is working
+
+========================================
+CONNECTION TEST SUMMARY
+========================================
+✓ All critical tests passed!
+ℹ Your database is properly configured and accessible.
+```
+
+---
+
+## Connection Management & Pooling
+
+### Database Connection Module
+
+We provide a comprehensive connection management module at `src/lib/db.ts` that handles:
+
+- ✅ **Connection Pooling**: Reuses connections across requests
+- ✅ **Health Checks**: Verifies database availability
+- ✅ **Retry Logic**: Handles transient network failures
+- ✅ **Error Handling**: Provides helpful error messages
+- ✅ **Monitoring**: Tracks connection usage and performance
+
+### Usage in API Routes
+
+**Basic Usage**:
+```typescript
+import prisma from '@/lib/db';
+
+export async function GET(request: Request) {
+  try {
+    const users = await prisma.user.findMany({
+      take: 10,
+      select: { id: true, name: true, email: true },
+    });
+    
+    return Response.json({ success: true, data: users });
+  } catch (error) {
+    return Response.json({ error: 'Database error' }, { status: 500 });
+  }
+}
+```
+
+**With Retry Logic** (for transient failures):
+```typescript
+import prisma, { executeWithRetry } from '@/lib/db';
+
+export async function GET(request: Request) {
+  try {
+    const users = await executeWithRetry(
+      () => prisma.user.findMany({ take: 10 }),
+      3,  // max retries
+      1000  // retry delay (ms)
+    );
+    
+    return Response.json({ success: true, data: users });
+  } catch (error) {
+    return Response.json({ error: 'Database unavailable' }, { status: 503 });
+  }
+}
+```
+
+### Connection Pool Configuration
+
+Configure pool settings via environment variables:
+
+```bash
+# .env.local
+DATABASE_CONNECTION_LIMIT=10           # Max connections in pool
+DATABASE_CONNECTION_TIMEOUT=10000      # Connection timeout (ms)
+DATABASE_POOL_TIMEOUT=10000            # Pool checkout timeout (ms)
+DATABASE_STATEMENT_TIMEOUT=30000       # Query timeout (ms)
+```
+
+**Pool Size Guidelines**:
+
+| Application Load | Recommended Pool Size |
+|------------------|----------------------|
+| Low (<100 req/min) | 5-10 connections |
+| Medium (100-1000 req/min) | 10-20 connections |
+| High (>1000 req/min) | 20-50 connections |
+
+**Note**: Don't set pool size > database `max_connections` setting!
+
+**Check max_connections**:
+```sql
+-- AWS RDS / Azure PostgreSQL
+SELECT setting FROM pg_settings WHERE name = 'max_connections';
+-- Default: 100 for basic tiers
+```
+
+### Serverless Considerations (Vercel, Lambda)
+
+**Problem**: Serverless functions create new connections on each invocation, quickly exhausting the database connection pool.
+
+**Solution 1: Connection Pooling with PgBouncer**
+
+1. Add connection pooler (e.g., [Supavisor](https://supabase.com/docs/guides/database/connecting-to-postgres#connection-pooler))
+2. Use pooled connection string:
+
+```bash
+# .env.local
+DATABASE_URL="postgresql://user:pass@pooler.example.com:5432/db?pgbouncer=true"
+DIRECT_URL="postgresql://user:pass@direct-host:5432/db"  # For migrations
+```
+
+```prisma
+// prisma/schema.prisma
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")      // Pooled (for queries)
+  directUrl = env("DIRECT_URL")        // Direct (for migrations)
+}
+```
+
+**Solution 2: Prisma Data Proxy** (Paid)
+
+```bash
+DATABASE_URL="prisma://aws-us-east-1.prisma-data.com/?api_key=..."
+```
+
+**Solution 3: External Poolers**
+
+- [AWS RDS Proxy](https://aws.amazon.com/rds/proxy/)
+- [Azure Connection Pooler](https://learn.microsoft.com/en-us/azure/postgresql/flexible-server/concepts-pgbouncer)
+- [Supabase Pooler](https://supabase.com/docs/guides/database/connecting-to-postgres)
+
+---
+
+## Health Checks & Monitoring
+
+### Health Check Endpoint
+
+We provide a comprehensive health check API at `/api/health/db`:
+
+**Quick Health Check**:
+```bash
+curl http://localhost:3000/api/health/db
+```
+
+**Response**:
+```json
+{
+  "status": "healthy",
+  "message": "Database connection successful",
+  "timestamp": "2025-12-31T10:00:00.000Z",
+  "responseTime": "45ms"
+}
+```
+
+**Detailed Health Check**:
+```bash
+curl "http://localhost:3000/api/health/db?detailed=true"
+```
+
+**Response**:
+```json
+{
+  "status": "healthy",
+  "message": "Database connection successful",
+  "timestamp": "2025-12-31T10:00:00.000Z",
+  "responseTime": "52ms",
+  "details": {
+    "provider": "postgresql",
+    "version": "PostgreSQL 16.1 on x86_64-pc-linux-gnu",
+    "database": "trustxdb",
+    "connections": {
+      "current": 8,
+      "max": 100,
+      "usage": "8.0%"
+    }
+  }
+}
+```
+
+**Comprehensive Test** (POST):
+```bash
+curl -X POST http://localhost:3000/api/health/db
+```
+
+### Monitoring Dashboards
+
+**AWS CloudWatch**:
+1. Go to RDS → Your Database → Monitoring
+2. Key Metrics:
+   - **CPU Utilization**: Should be <80%
+   - **Database Connections**: Monitor for connection leaks
+   - **Read/Write Latency**: Baseline performance
+   - **Storage Space**: Set alerts at 80% usage
+   - **Replication Lag**: For read replicas
+
+**Azure Monitor**:
+1. Go to Azure Portal → Your Server → Monitoring
+2. Key Metrics:
+   - **CPU Percent**: Should be <80%
+   - **Active Connections**: Monitor pool exhaustion
+   - **Storage Percent**: Set alerts at 80%
+   - **IO Consumption**: Track query performance
+   - **Failed Connections**: Network or auth issues
+
+### Set Up Alerts
+
+**AWS CloudWatch Alarms**:
+```bash
+# High CPU alert
+aws cloudwatch put-metric-alarm \
+  --alarm-name trustx-db-high-cpu \
+  --alarm-description "Alert if CPU exceeds 80%" \
+  --metric-name CPUUtilization \
+  --namespace AWS/RDS \
+  --statistic Average \
+  --period 300 \
+  --threshold 80 \
+  --comparison-operator GreaterThanThreshold \
+  --dimensions Name=DBInstanceIdentifier,Value=trustx-db \
+  --evaluation-periods 2
+
+# Storage alert
+aws cloudwatch put-metric-alarm \
+  --alarm-name trustx-db-low-storage \
+  --metric-name FreeStorageSpace \
+  --namespace AWS/RDS \
+  --statistic Average \
+  --period 300 \
+  --threshold 2000000000 \  # 2 GB
+  --comparison-operator LessThanThreshold \
+  --dimensions Name=DBInstanceIdentifier,Value=trustx-db
+```
+
+**Azure Monitor Alerts**:
+```bash
+# High CPU alert
+az monitor metrics alert create \
+  --name trustx-db-high-cpu \
+  --resource-group trustx-rg \
+  --scopes /subscriptions/.../providers/Microsoft.DBforPostgreSQL/flexibleServers/trustx-db \
+  --condition "avg cpu_percent > 80" \
+  --window-size 5m \
+  --evaluation-frequency 1m
+
+# Connection limit alert
+az monitor metrics alert create \
+  --name trustx-db-connection-limit \
+  --resource-group trustx-rg \
+  --scopes /subscriptions/.../providers/Microsoft.DBforPostgreSQL/flexibleServers/trustx-db \
+  --condition "avg active_connections > 90"
+```
+
+---
+
+## Backup & Disaster Recovery
+
+### Automated Backups
+
+**AWS RDS**:
+- **Frequency**: Daily automated snapshots
+- **Retention**: 7-35 days (configured during setup)
+- **Backup Window**: 03:00-04:00 UTC (configurable)
+- **Point-in-Time Recovery (PITR)**: Restore to any second within retention period
+
+**Viewing Backups**:
+```bash
+aws rds describe-db-snapshots \
+  --db-instance-identifier trustx-db
+```
+
+**Creating Manual Snapshot**:
+```bash
+aws rds create-db-snapshot \
+  --db-instance-identifier trustx-db \
+  --db-snapshot-identifier trustx-manual-backup-2025-12-31
+```
+
+**Restoring from Snapshot**:
+```bash
+aws rds restore-db-instance-from-db-snapshot \
+  --db-instance-identifier trustx-db-restored \
+  --db-snapshot-identifier trustx-manual-backup-2025-12-31
+```
+
+**Azure PostgreSQL**:
+- **Frequency**: Daily automated backups
+- **Retention**: 7-35 days (configured during setup)
+- **Geo-Redundant Backup**: Optional (stores in paired region)
+- **Point-in-Time Recovery (PITR)**: Restore to any point within retention
+
+**Viewing Backups**:
+```bash
+az postgres flexible-server backup list \
+  --resource-group trustx-rg \
+  --name trustx-db-server
+```
+
+**Restore to Point-in-Time**:
+```bash
+az postgres flexible-server restore \
+  --resource-group trustx-rg \
+  --name trustx-db-restored \
+  --source-server trustx-db-server \
+  --restore-time "2025-12-31T10:00:00Z"
+```
+
+### Backup Best Practices
+
+✅ **Test Restores Regularly**: Verify backups are working
+```bash
+# Restore to a test instance quarterly
+# Verify data integrity
+# Document restore procedure
+```
+
+✅ **Export Critical Data**: Supplement backups with pg_dump
+```bash
+# Export full database
+pg_dump -h trustx-db.abc123.us-east-1.rds.amazonaws.com \
+        -U adminuser \
+        -d trustxdb \
+        -F c \
+        -f trustxdb-backup-$(date +%Y%m%d).dump
+
+# Export specific table
+pg_dump -h trustx-db.abc123.us-east-1.rds.amazonaws.com \
+        -U adminuser \
+        -d trustxdb \
+        -t users \
+        > users-backup.sql
+```
+
+✅ **Store Offsite**: Copy backups to S3/Blob Storage
+```bash
+# AWS S3
+aws s3 cp trustxdb-backup.dump s3://trustx-backups/
+
+# Azure Blob Storage
+az storage blob upload \
+  --account-name trustxstorage \
+  --container-name backups \
+  --name trustxdb-backup.dump \
+  --file trustxdb-backup.dump
+```
+
+✅ **Document Recovery Procedure**:
+1. Time to detect outage
+2. Steps to restore from backup
+3. Data loss tolerance (RPO - Recovery Point Objective)
+4. Downtime tolerance (RTO - Recovery Time Objective)
+
+### Disaster Recovery Strategy
+
+**Scenario 1: Database Corruption**
+- **Solution**: Point-in-time restore to before corruption
+- **RTO**: 30 minutes
+- **RPO**: Minimal (up to last transaction)
+
+**Scenario 2: Region Outage**
+- **Solution**: Restore backup in different region
+- **RTO**: 1-2 hours
+- **RPO**: Up to 24 hours (last backup)
+
+**Scenario 3: Accidental Data Deletion**
+- **Solution**: Restore specific table from pg_dump
+- **RTO**: 15 minutes
+- **RPO**: Depends on dump frequency
+
+**Scenario 4: Complete Account Compromise**
+- **Solution**: Restore from offsite S3/Blob backup
+- **RTO**: 2-4 hours
+- **RPO**: Last offsite backup
+
+---
+
+## Performance Optimization
+
+### Query Optimization
+
+**Use Prisma Query Insights**:
+```typescript
+import prisma from '@/lib/db';
+
+// Enable query logging in development
+// Already configured in src/lib/db.ts
+
+const users = await prisma.user.findMany({
+  where: { role: 'USER' },
+  select: { id: true, name: true, email: true },  // Only select needed fields
+  take: 20,  // Limit results
+});
+
+// Check generated SQL in console
+```
+
+**Add Indexes for Frequently Queried Fields**:
+```prisma
+model User {
+  id    Int    @id @default(autoincrement())
+  email String @unique
+  name  String
+  role  String @default("USER")
+  
+  @@index([email])        // Index for email lookups
+  @@index([role])         // Index for role filtering
+  @@index([createdAt])    // Index for date range queries
+}
+```
+
+**Run Index Creation Migration**:
+```bash
+npx prisma migrate dev --name add_performance_indexes
+```
+
+### Connection Pooling
+
+**Adjust Pool Size Based on Load**:
+
+```bash
+# Low traffic (development)
+DATABASE_CONNECTION_LIMIT=5
+
+# Medium traffic (production)
+DATABASE_CONNECTION_LIMIT=20
+
+# High traffic (scaled production)
+DATABASE_CONNECTION_LIMIT=50
+```
+
+**Monitor Connection Usage**:
+```bash
+# Check current connections
+curl "http://localhost:3000/api/health/db?detailed=true" | jq '.details.connections'
+```
+
+### Read Replicas (For High Traffic)
+
+**AWS RDS - Create Read Replica**:
+```bash
+aws rds create-db-instance-read-replica \
+  --db-instance-identifier trustx-db-read-1 \
+  --source-db-instance-identifier trustx-db \
+  --db-instance-class db.t3.micro \
+  --availability-zone us-east-1b
+```
+
+**Configure Prisma for Read Replicas**:
+```typescript
+// src/lib/db-read.ts
+import { PrismaClient } from '@prisma/client';
+
+export const prismaRead = new PrismaClient({
+  datasources: {
+    db: {
+      url: process.env.DATABASE_READ_URL,  // Replica endpoint
+    },
+  },
+});
+
+// Use for read-heavy operations
+const users = await prismaRead.user.findMany();
+```
+
+**Azure PostgreSQL - Create Read Replica**:
+```bash
+az postgres flexible-server replica create \
+  --replica-name trustx-db-read-1 \
+  --resource-group trustx-rg \
+  --source-server trustx-db-server \
+  --location eastus
+```
+
+### Caching Strategy
+
+**Combine Database with Redis**:
+```typescript
+import { redis } from '@/lib/redis';
+import prisma from '@/lib/db';
+
+export async function getUser(id: number) {
+  // Check cache first
+  const cached = await redis.get(`user:${id}`);
+  if (cached) {
+    return JSON.parse(cached);
+  }
+  
+  // Query database
+  const user = await prisma.user.findUnique({
+    where: { id },
+  });
+  
+  // Cache for 5 minutes
+  await redis.setex(`user:${id}`, 300, JSON.stringify(user));
+  
+  return user;
+}
+```
+
+---
+
+## Security Best Practices
+
+### ✅ 1. Use SSL/TLS Encryption
+
+**Always include `sslmode=require`**:
+```bash
+DATABASE_URL="postgresql://user:pass@host:5432/db?sslmode=require"
+```
+
+**Verify SSL is enabled**:
+```bash
+npm run test:db
+# Check output: "✓ SSL/TLS is enabled"
+```
+
+### ✅ 2. Rotate Passwords Regularly
+
+**AWS RDS - Modify Master Password**:
+```bash
+aws rds modify-db-instance \
+  --db-instance-identifier trustx-db \
+  --master-user-password "NewSecurePassword123!" \
+  --apply-immediately
+```
+
+**Azure PostgreSQL - Reset Password**:
+```bash
+az postgres flexible-server update \
+  --resource-group trustx-rg \
+  --name trustx-db-server \
+  --admin-password "NewSecurePassword123!"
+```
+
+**Recommendation**: Rotate every 90 days, use password manager
+
+### ✅ 3. Enable IAM Database Authentication
+
+**AWS RDS - Enable IAM Auth**:
+```bash
+aws rds modify-db-instance \
+  --db-instance-identifier trustx-db \
+  --enable-iam-database-authentication \
+  --apply-immediately
+```
+
+**Connect using IAM token**:
+```typescript
+import { RDS } from '@aws-sdk/client-rds';
+
+const rds = new RDS({ region: 'us-east-1' });
+
+const token = await rds.generateAuthToken({
+  hostname: 'trustx-db.abc123.us-east-1.rds.amazonaws.com',
+  port: 5432,
+  username: 'iamuser',
+});
+
+const DATABASE_URL = `postgresql://iamuser:${token}@trustx-db.abc123.us-east-1.rds.amazonaws.com:5432/trustxdb?sslmode=require`;
+```
+
+**Benefits**:
+- ✅ No password storage in environment variables
+- ✅ Tokens auto-expire (15 minutes)
+- ✅ Centralized IAM access control
+
+### ✅ 4. Limit Database User Permissions
+
+**Create application user with limited permissions**:
+```sql
+-- Connect as master user
+psql -h trustx-db.abc123.us-east-1.rds.amazonaws.com -U adminuser -d trustxdb
+
+-- Create application user
+CREATE USER appuser WITH PASSWORD 'SecureAppPassword!';
+
+-- Grant only necessary permissions
+GRANT CONNECT ON DATABASE trustxdb TO appuser;
+GRANT USAGE ON SCHEMA public TO appuser;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO appuser;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO appuser;
+
+-- Deny dangerous operations
+REVOKE DROP, TRUNCATE ON ALL TABLES IN SCHEMA public FROM appuser;
+```
+
+**Use app user in production**:
+```bash
+# .env.production
+DATABASE_URL="postgresql://appuser:SecureAppPassword!@host:5432/trustxdb?sslmode=require"
+```
+
+### ✅ 5. Enable Audit Logging
+
+**AWS RDS - Enable CloudWatch Logs**:
+```bash
+aws rds modify-db-instance \
+  --db-instance-identifier trustx-db \
+  --cloudwatch-logs-export-configuration '{"LogTypesToEnable":["postgresql"]}' \
+  --apply-immediately
+```
+
+**Azure PostgreSQL - Enable Diagnostic Logs**:
+```bash
+az monitor diagnostic-settings create \
+  --name trustx-db-logs \
+  --resource /subscriptions/.../providers/Microsoft.DBforPostgreSQL/flexibleServers/trustx-db \
+  --logs '[{"category": "PostgreSQLLogs", "enabled": true}]' \
+  --workspace /subscriptions/.../resourceGroups/trustx-rg/providers/Microsoft.OperationalInsights/workspaces/trustx-workspace
+```
+
+### ✅ 6. Network Isolation
+
+**AWS - Private Subnet + VPC Peering**:
+1. Create RDS in private subnet (no public access)
+2. Deploy app in same VPC or peer VPCs
+3. Use private endpoint for connection
+
+**Azure - Private Endpoint**:
+```bash
+az network private-endpoint create \
+  --resource-group trustx-rg \
+  --name trustx-db-private-endpoint \
+  --vnet-name trustx-vnet \
+  --subnet trustx-subnet \
+  --private-connection-resource-id /subscriptions/.../providers/Microsoft.DBforPostgreSQL/flexibleServers/trustx-db \
+  --group-id postgresqlServer \
+  --connection-name trustx-db-connection
+```
+
+---
+
+## Cost Optimization
+
+### 💰 Reduce Costs Without Sacrificing Performance
+
+**1. Right-Size Instance Class**
+
+| Workload | AWS RDS | Azure PostgreSQL | Monthly Cost |
+|----------|---------|------------------|--------------|
+| Dev/Test | db.t3.micro | B1ms (1 vCore, 2 GB) | ~$15 |
+| Small Prod | db.t3.small | B2s (2 vCore, 4 GB) | ~$30 |
+| Medium Prod | db.t3.medium | D2s v3 (2 vCore, 8 GB) | ~$70 |
+| Large Prod | db.r5.large | D4s v3 (4 vCore, 16 GB) | ~$150 |
+
+**Monitor and adjust**:
+```bash
+# AWS - Check CPU utilization
+aws cloudwatch get-metric-statistics \
+  --namespace AWS/RDS \
+  --metric-name CPUUtilization \
+  --dimensions Name=DBInstanceIdentifier,Value=trustx-db \
+  --start-time 2025-12-24T00:00:00Z \
+  --end-time 2025-12-31T00:00:00Z \
+  --period 3600 \
+  --statistics Average
+
+# If consistently < 30%, downgrade instance
+# If consistently > 80%, upgrade instance
+```
+
+**2. Optimize Storage**
+
+**AWS RDS**:
+- Use gp3 (cheaper than gp2, same performance)
+- Enable storage autoscaling (pay only for used space)
+- Minimum: 20 GB (~$2/month)
+
+**Azure PostgreSQL**:
+- Minimum: 32 GB (~$4/month)
+- Auto-grow enabled by default
+
+**3. Adjust Backup Retention**
+
+**Short retention for dev**:
+```bash
+# 1 day retention (minimum)
+aws rds modify-db-instance \
+  --db-instance-identifier trustx-dev-db \
+  --backup-retention-period 1
+```
+
+**Longer retention for prod**:
+```bash
+# 7-14 days recommended for production
+aws rds modify-db-instance \
+  --db-instance-identifier trustx-prod-db \
+  --backup-retention-period 7
+```
+
+**Cost**: Each day of retention adds ~10% to storage cost
+
+**4. Stop Instances When Not in Use (Dev/Test)**
+
+**AWS**:
+```bash
+# Stop (saves compute cost, storage still charged)
+aws rds stop-db-instance \
+  --db-instance-identifier trustx-dev-db
+
+# Start
+aws rds start-db-instance \
+  --db-instance-identifier trustx-dev-db
+```
+
+**Azure**:
+```bash
+# Stop
+az postgres flexible-server stop \
+  --resource-group trustx-rg \
+  --name trustx-dev-db
+
+# Start
+az postgres flexible-server start \
+  --resource-group trustx-rg \
+  --name trustx-dev-db
+```
+
+**Savings**: ~70% when stopped (storage still charged)
+
+**5. Use Reserved Instances (Production)**
+
+**AWS RDS Reserved Instances**:
+- 1 year commitment: 30-40% discount
+- 3 year commitment: 50-60% discount
+
+```bash
+aws rds purchase-reserved-db-instances-offering \
+  --reserved-db-instances-offering-id xxx \
+  --db-instance-count 1
+```
+
+**Azure Reserved Capacity**:
+- 1 year commitment: 35% discount
+- 3 year commitment: 55% discount
+
+**6. Monitor Costs**
+
+**AWS Cost Explorer**:
+```bash
+aws ce get-cost-and-usage \
+  --time-period Start=2025-12-01,End=2025-12-31 \
+  --granularity DAILY \
+  --metrics BlendedCost \
+  --filter file://rds-filter.json
+```
+
+**Azure Cost Management**:
+```bash
+az costmanagement query \
+  --type Usage \
+  --dataset-filter "{\"and\":[{\"dimensions\":{\"name\":\"ResourceGroup\",\"operator\":\"In\",\"values\":[\"trustx-rg\"]}}]}" \
+  --timeframe MonthToDate
+```
+
+---
+
+## Troubleshooting
+
+### Issue: Connection Refused (ECONNREFUSED)
+
+**Error**:
+```
+Error: connect ECONNREFUSED
+```
+
+**Causes & Solutions**:
+
+1. **Database not running**
+   ```bash
+   # AWS - Check status
+   aws rds describe-db-instances --db-instance-identifier trustx-db --query "DBInstances[0].DBInstanceStatus"
+   
+   # Azure - Check status
+   az postgres flexible-server show -g trustx-rg -n trustx-db-server --query state
+   ```
+
+2. **Firewall blocking access**
+   ```bash
+   # AWS - Check security group rules
+   aws ec2 describe-security-groups --group-ids sg-xxx
+   
+   # Azure - Check firewall rules
+   az postgres flexible-server firewall-rule list -g trustx-rg -n trustx-db-server
+   ```
+   
+   **Solution**: Add your current IP
+   ```bash
+   # Get your IP
+   curl https://checkip.amazonaws.com
+   
+   # AWS - Add rule
+   aws ec2 authorize-security-group-ingress \
+     --group-id sg-xxx \
+     --cidr YOUR_IP/32 \
+     --protocol tcp \
+     --port 5432
+   
+   # Azure - Add rule
+   az postgres flexible-server firewall-rule create \
+     --resource-group trustx-rg \
+     --name trustx-db-server \
+     --rule-name MyIPAccess \
+     --start-ip-address YOUR_IP \
+     --end-ip-address YOUR_IP
+   ```
+
+3. **Wrong endpoint**
+   ```bash
+   # Verify endpoint in DATABASE_URL matches actual endpoint
+   # AWS
+   aws rds describe-db-instances --db-instance-identifier trustx-db --query "DBInstances[0].Endpoint.Address"
+   
+   # Azure
+   az postgres flexible-server show -g trustx-rg -n trustx-db-server --query fullyQualifiedDomainName
+   ```
+
+### Issue: Authentication Failed
+
+**Error**:
+```
+Error: password authentication failed for user "adminuser"
+```
+
+**Solutions**:
+
+1. **Verify credentials**
+   - Check username matches (case-sensitive)
+   - Check password (no typos, special characters escaped)
+   - Verify DATABASE_URL format
+
+2. **Reset password**
+   ```bash
+   # AWS
+   aws rds modify-db-instance \
+     --db-instance-identifier trustx-db \
+     --master-user-password "NewPassword!" \
+     --apply-immediately
+   
+   # Azure
+   az postgres flexible-server update \
+     --resource-group trustx-rg \
+     --name trustx-db-server \
+     --admin-password "NewPassword!"
+   ```
+
+3. **Check user exists**
+   ```sql
+   -- Connect as master user
+   psql -h host -U adminuser -d postgres
+   
+   -- List users
+   \du
+   
+   -- Create user if missing
+   CREATE USER appuser WITH PASSWORD 'password';
+   ```
+
+### Issue: SSL Connection Error
+
+**Error**:
+```
+Error: SSL connection required
+```
+
+**Solution**: Add `sslmode=require` to connection string
+```bash
+DATABASE_URL="postgresql://user:pass@host:5432/db?sslmode=require"
+```
+
+**For local development** (disable SSL):
+```bash
+DATABASE_URL="postgresql://user:pass@localhost:5432/db?sslmode=disable"
+```
+
+### Issue: Connection Pool Exhausted
+
+**Error**:
+```
+Error: Connection pool timeout
+Error: too many connections for role
+```
+
+**Solutions**:
+
+1. **Increase pool limit**
+   ```bash
+   # .env.local
+   DATABASE_CONNECTION_LIMIT=20  # Increase from default 10
+   ```
+
+2. **Check for connection leaks**
+   ```typescript
+   // Always use Prisma's connection from src/lib/db.ts
+   import prisma from '@/lib/db';
+   
+   // ❌ DON'T create new PrismaClient instances
+   // const prisma = new PrismaClient();
+   ```
+
+3. **Increase database max_connections**
+   ```sql
+   -- Check current limit
+   SHOW max_connections;
+   
+   -- AWS RDS - Modify parameter group
+   -- Azure - Increase SKU tier (max_connections tied to tier)
+   ```
+
+4. **Monitor connection usage**
+   ```bash
+   curl "http://localhost:3000/api/health/db?detailed=true"
+   # Check connections.usage percentage
+   ```
+
+### Issue: Slow Queries
+
+**Solution 1: Add Indexes**
+```sql
+-- Find slow queries (AWS RDS)
+SELECT query, calls, total_time, mean_time
+FROM pg_stat_statements
+ORDER BY mean_time DESC
+LIMIT 10;
+
+-- Add index for frequently filtered columns
+CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX idx_orders_status ON orders(status);
+```
+
+**Solution 2: Use Connection Pooling**
+- Implement PgBouncer for serverless environments
+- Reduces connection overhead
+
+**Solution 3: Optimize Prisma Queries**
+```typescript
+// ❌ Bad - N+1 query problem
+const users = await prisma.user.findMany();
+for (const user of users) {
+  const orders = await prisma.order.findMany({ where: { userId: user.id } });
+}
+
+// ✅ Good - Single query with join
+const users = await prisma.user.findMany({
+  include: { orders: true },
+});
+```
+
+### Issue: Database Full (Storage Limit Reached)
+
+**Check storage usage**:
+```sql
+SELECT pg_size_pretty(pg_database_size('trustxdb'));
+```
+
+**Solution 1: Enable Auto-scaling** (AWS)
+```bash
+aws rds modify-db-instance \
+  --db-instance-identifier trustx-db \
+  --max-allocated-storage 100 \  # Auto-scale up to 100 GB
+  --apply-immediately
+```
+
+**Solution 2: Increase Storage** (Azure)
+```bash
+az postgres flexible-server update \
+  --resource-group trustx-rg \
+  --name trustx-db-server \
+  --storage-size 64  # Increase to 64 GB
+```
+
+**Solution 3: Clean Up Old Data**
+```sql
+-- Archive old records
+DELETE FROM logs WHERE created_at < NOW() - INTERVAL '90 days';
+
+-- Vacuum to reclaim space
+VACUUM FULL;
+```
+
+---
+
+## Verification & Testing
+
+### 1. Connection Test Script
+
+**Run comprehensive connection test**:
+```bash
+npm run test:db
+```
+
+**What it tests**:
+- ✅ Environment configuration (DATABASE_URL set)
+- ✅ Basic connectivity (can connect to database)
+- ✅ Database version and information
+- ✅ Connection pool status and usage
+- ✅ Schema access permissions
+- ✅ SSL/TLS configuration
+- ✅ Write operations (create/insert/delete table)
+
+**Expected result**: All tests pass, "✓ All critical tests passed!"
+
+### 2. Health Check API
+
+**Test from browser or curl**:
+```bash
+# Quick check
+curl http://localhost:3000/api/health/db
+
+# Detailed info
+curl "http://localhost:3000/api/health/db?detailed=true"
+
+# Comprehensive test
+curl -X POST http://localhost:3000/api/health/db
+```
+
+**Use in production monitoring**:
+- Set up uptime monitoring (UptimeRobot, Pingdom)
+- Configure load balancer health checks (AWS ALB, Azure Load Balancer)
+- Integrate with APM tools (DataDog, New Relic)
+
+### 3. Manual Connection Test (psql)
+
+**AWS RDS**:
+```bash
+psql -h trustx-db.abc123.us-east-1.rds.amazonaws.com \
+     -U adminuser \
+     -d trustxdb \
+     -p 5432
+
+# After connecting:
+\dt          # List tables
+\d users     # Describe users table
+SELECT version();  # Check PostgreSQL version
+```
+
+**Azure PostgreSQL**:
+```bash
+psql "host=trustx-db-server.postgres.database.azure.com port=5432 dbname=trustxdb user=adminuser sslmode=require"
+
+# Or with password prompt
+psql -h trustx-db-server.postgres.database.azure.com \
+     -U adminuser \
+     -d trustxdb \
+     --set=sslmode=require
+```
+
+### 4. Verify from Application
+
+**Create a test API route**:
+```typescript
+// src/app/api/test-db/route.ts
+import { NextResponse } from 'next/server';
+import prisma from '@/lib/db';
+
+export async function GET() {
+  try {
+    const userCount = await prisma.user.count();
+    const projectCount = await prisma.project.count();
+    
+    return NextResponse.json({
+      success: true,
+      message: 'Database connected',
+      stats: {
+        users: userCount,
+        projects: projectCount,
+      },
+    });
+  } catch (error: any) {
+    return NextResponse.json({
+      success: false,
+      error: error.message,
+    }, { status: 500 });
+  }
+}
+```
+
+**Test**:
+```bash
+curl http://localhost:3000/api/test-db
+```
+
+### 5. Load Testing (Optional)
+
+**Test connection pool under load**:
+```bash
+# Using Apache Bench
+ab -n 1000 -c 10 http://localhost:3000/api/test-db
+
+# Using Artillery
+npm install -g artillery
+artillery quick --count 10 -n 20 http://localhost:3000/api/test-db
+```
+
+**Monitor**:
+- Connection pool usage (health check endpoint)
+- Database CPU and memory (CloudWatch / Azure Monitor)
+- Query response times
+
+---
+
+## Reflection
+
+### Key Learnings
+
+**1. Managed Databases Are Worth It**
+
+Cloud-managed databases (AWS RDS, Azure PostgreSQL) handle 80% of database operations—backups, patching, monitoring, scaling—leaving you to focus on application logic. The ~$15-30/month cost is justified by the time saved on maintenance.
+
+**Trade-offs**:
+- ✅ **Pros**: Zero downtime upgrades, automated backups, easy scaling, built-in monitoring
+- ⚠ **Cons**: Vendor lock-in, limited control over internals, ongoing cost vs. self-hosted
+
+**2. Security Layers Matter**
+
+Defense in depth is critical:
+- **Network Layer**: Private subnets, VPC peering, IP allowlisting
+- **Transport Layer**: SSL/TLS encryption (`sslmode=require`)
+- **Application Layer**: Connection pooling limits, IAM authentication
+- **Access Layer**: Least-privilege database users, role-based permissions
+
+**Mistake to avoid**: Using `0.0.0.0/0` (all IPs) for firewall rules. Always restrict to specific IPs or VPC CIDRs.
+
+**3. Connection Pooling Is Essential**
+
+Prisma's connection pooling is good, but serverless platforms (Vercel, Lambda) create new connections on each invocation, quickly exhausting the database pool.
+
+**Solutions**:
+- Use external connection poolers (PgBouncer, AWS RDS Proxy)
+- Configure `DIRECT_URL` for migrations
+- Set appropriate pool limits (10-20 for most apps)
+
+**4. Backup ≠ Disaster Recovery**
+
+Automated backups are great, but test your restore procedure regularly. You don't have a backup until you've successfully restored from it.
+
+**Best practices**:
+- Test restores quarterly
+- Document restore procedure (time estimates, steps)
+- Store offsite backups (S3, Blob Storage) for catastrophic scenarios
+- Define RPO (Recovery Point Objective) and RTO (Recovery Time Objective)
+
+**5. Monitor Everything**
+
+Set up alerts for:
+- High CPU usage (>80%)
+- Low storage (<20% free)
+- Connection pool exhaustion (>90% usage)
+- Failed connections (authentication failures)
+- Slow queries (>1 second avg)
+
+Use health check endpoints for uptime monitoring and load balancer health checks.
+
+**6. Cost Optimization Requires Monitoring**
+
+Right-size your database instance:
+- If CPU consistently <30%, downgrade instance class
+- If CPU consistently >80%, upgrade instance class
+- Stop dev/test instances when not in use (saves ~70%)
+- Use reserved instances for production (saves 30-60%)
+
+**7. SSL/TLS Is Non-Negotiable**
+
+Always use `sslmode=require` for cloud databases. Unencrypted connections expose credentials and data to network sniffing, especially on shared cloud infrastructure.
+
+**8. Public vs Private Access Trade-offs**
+
+**Public Access** (0.0.0.0/0 with IP allowlist):
+- ✅ Easy initial setup
+- ✅ No VPC peering required
+- ⚠ Exposed to internet (brute force attacks)
+- ⚠ Firewall rules must be managed
+
+**Private Access** (VPC/VNet only):
+- ✅ Database never exposed to internet
+- ✅ No firewall rules needed
+- ✅ Lower latency (same network)
+- ⚠ Requires VPC peering or bastion host
+- ⚠ More complex initial setup
+
+**Recommendation**: Public access with IP allowlist for dev/test, private endpoints for production.
+
+---
+
+### Future Considerations
+
+**1. Multi-Region Deployment**
+
+For global applications, consider:
+- **Read Replicas in Other Regions**: Serve local traffic with low latency
+- **Cross-Region Backups**: Protection against regional outages
+- **Database Sharding**: Split data by geography (users in EU → EU database)
+
+**2. Data Privacy Compliance**
+
+For GDPR, CCPA, HIPAA:
+- Enable encryption at rest (KMS keys)
+- Enable encryption in transit (SSL/TLS)
+- Implement audit logging (CloudWatch Logs, Azure Monitor)
+- Use private endpoints (no public internet exposure)
+- Document data retention policies
+
+**3. Advanced Monitoring**
+
+Integrate with APM tools:
+- **DataDog**: Real-time metrics, query performance
+- **New Relic**: Application-database correlation
+- **Sentry**: Error tracking with database context
+
+**4. Blue-Green Deployments**
+
+For zero-downtime migrations:
+1. Create new database instance (blue)
+2. Replicate data from old instance (green)
+3. Switch application to blue instance
+4. Keep green as fallback
+
+**5. Database Proxies**
+
+For serverless platforms:
+- **AWS RDS Proxy**: Connection pooling, IAM auth, automatic failover (~$15/month)
+- **Azure Database Pooler**: Built-in PgBouncer integration (free)
+- **Supavisor**: Open-source connection pooler (self-hosted)
+
+---
+
+### Cost Summary
+
+**AWS RDS PostgreSQL** (us-east-1):
+```
+Instance (t3.micro):        $15/month
+Storage (20 GB gp3):        $2/month
+Backup (7 days, 20 GB):     $2/month
+Data Transfer (1 GB out):   $0.09/month
+--------------------------------
+Total:                      ~$19/month
+```
+
+**Azure Database for PostgreSQL** (East US):
+```
+Instance (B1ms):            $15/month
+Storage (32 GB):            $4/month
+Backup (7 days, 32 GB):     $3/month
+--------------------------------
+Total:                      ~$22/month
+```
+
+**Savings Tips**:
+- Stop dev instances when not in use: **~70% savings**
+- Reserved instances (1 year): **30-40% savings**
+- Reserved instances (3 years): **50-60% savings**
+
+---
+
+### Documentation Checklist
+
+✅ **README.md**: This comprehensive guide (you're reading it!)
+
+✅ **Setup Scripts**:
+- [`scripts/setup-aws-rds.sh`](scripts/setup-aws-rds.sh): Automated AWS RDS provisioning
+- [`scripts/setup-azure-postgresql.sh`](scripts/setup-azure-postgresql.sh): Automated Azure PostgreSQL provisioning
+
+✅ **Connection Management**:
+- [`src/lib/db.ts`](src/lib/db.ts): Prisma client with connection pooling, health checks, retry logic
+
+✅ **Health Check API**:
+- [`src/app/api/health/db/route.ts`](src/app/api/health/db/route.ts): Database health check endpoint
+
+✅ **Testing Utilities**:
+- [`scripts/test-db-connection.js`](scripts/test-db-connection.js): Comprehensive connection test script
+- [`scripts/DATABASE-TESTING.md`](scripts/DATABASE-TESTING.md): Testing documentation
+
+✅ **Configuration**:
+- [`prisma/schema.prisma`](prisma/schema.prisma): Updated for PostgreSQL
+- [`.env.example`](.env.example): Updated with cloud database connection strings
+- [`package.json`](package.json): Added `test:db`, `db:health`, `db:migrate` scripts
+
+✅ **Credentials Files** (generated by setup scripts):
+- `rds-credentials-YYYYMMDD-HHMMSS.txt`: AWS RDS connection details
+- `azure-postgresql-credentials-YYYYMMDD-HHMMSS.txt`: Azure PostgreSQL connection details
+
+**⚠ Security Note**: Add credentials files to `.gitignore`!
+
+---
+
+## Quick Reference
+
+### Essential Commands
+
+```bash
+# Setup
+./scripts/setup-aws-rds.sh           # Provision AWS RDS
+./scripts/setup-azure-postgresql.sh  # Provision Azure PostgreSQL
+
+# Testing
+npm run test:db                      # Test database connection
+npm run db:health                    # Health check API
+curl -X POST http://localhost:3000/api/health/db  # Comprehensive test
+
+# Migrations
+npx prisma generate                  # Generate Prisma client
+npx prisma migrate deploy            # Run migrations
+npx prisma db push                   # Push schema changes
+npx prisma studio                    # Open Prisma Studio (GUI)
+
+# Monitoring
+npm run db:health                    # Check connection pool usage
+aws rds describe-db-instances        # AWS RDS status
+az postgres flexible-server show     # Azure PostgreSQL status
+
+# Backups
+aws rds create-db-snapshot           # Manual AWS snapshot
+az postgres flexible-server backup list  # List Azure backups
+pg_dump -h host -U user -d db > backup.sql  # Manual export
+```
+
+### Connection String Template
+
+```bash
+# AWS RDS
+DATABASE_URL="postgresql://adminuser:PASSWORD@trustx-db.abc123.us-east-1.rds.amazonaws.com:5432/trustxdb?schema=public&sslmode=require"
+
+# Azure PostgreSQL
+DATABASE_URL="postgresql://adminuser:PASSWORD@trustx-db-server.postgres.database.azure.com:5432/trustxdb?schema=public&sslmode=require"
+
+# Local Development
+DATABASE_URL="postgresql://postgres:password@localhost:5432/trustxdb?schema=public&sslmode=disable"
+```
+
+### Troubleshooting Quick Fixes
+
+```bash
+# Connection refused → Check firewall
+aws ec2 authorize-security-group-ingress --group-id sg-xxx --cidr YOUR_IP/32 --protocol tcp --port 5432
+
+# Authentication failed → Reset password
+aws rds modify-db-instance --db-instance-identifier trustx-db --master-user-password "NewPass!" --apply-immediately
+
+# SSL error → Add sslmode
+DATABASE_URL="...?sslmode=require"
+
+# Pool exhausted → Increase limit
+DATABASE_CONNECTION_LIMIT=20  # in .env.local
+```
+
+---
+
+**🎉 Cloud Database Setup Complete!**
+
+Your Next.js application is now connected to a production-ready managed PostgreSQL database with automated backups, monitoring, and security best practices.
+
+**Next Steps**:
+1. Run `npm run test:db` to verify connection
+2. Deploy to Vercel/Azure and test from production
+3. Set up monitoring alerts (CloudWatch / Azure Monitor)
+4. Schedule regular backup testing
+5. Document your disaster recovery procedure
+
+For questions or issues, see the [Troubleshooting](#troubleshooting) section or open an issue on GitHub.
