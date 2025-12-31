@@ -6006,3 +6006,1713 @@ Your Next.js application is now connected to a production-ready managed PostgreS
 5. Document your disaster recovery procedure
 
 For questions or issues, see the [Troubleshooting](#troubleshooting) section or open an issue on GitHub.
+
+---
+
+# Object Storage Configuration (S3 / Azure Blob)
+
+## Overview
+
+This project implements secure cloud object storage for file uploads and downloads using either **AWS S3** or **Azure Blob Storage**. Files are uploaded directly from the client to cloud storage using **presigned URLs** (AWS) or **SAS tokens** (Azure), ensuring secure, scalable, and cost-effective file handling without routing large files through your application server.
+
+**Key Features**:
+- ✅ **Dual Provider Support**: AWS S3 and Azure Blob Storage
+- ✅ **Presigned/SAS URLs**: Direct client-to-cloud uploads (no server proxy)
+- ✅ **File Validation**: Type and size restrictions
+- ✅ **Automated Setup Scripts**: One-command cloud provisioning
+- ✅ **Secure by Default**: Private buckets, encryption, CORS configuration
+- ✅ **Lifecycle Policies**: Auto-deletion of temp files, tier transitions
+- ✅ **Upload Verification**: Server-side confirmation and metadata storage
+- ✅ **Interactive Testing UI**: Upload test page at `/upload-test`
+
+## Table of Contents
+
+1. [Why Object Storage?](#why-object-storage)
+2. [Provider Comparison](#provider-comparison)
+3. [AWS S3 Setup](#aws-s3-setup)
+4. [Azure Blob Storage Setup](#azure-blob-storage-setup)
+5. [Application Configuration](#application-configuration)
+6. [Upload Flow Architecture](#upload-flow-architecture)
+7. [File Validation](#file-validation)
+8. [API Endpoints](#api-endpoints)
+9. [Testing Your Setup](#testing-your-setup)
+10. [Security Best Practices](#security-best-practices)
+11. [Lifecycle Policies](#lifecycle-policies)
+12. [Cost Optimization](#cost-optimization)
+13. [Troubleshooting](#troubleshooting-storage)
+14. [Monitoring & Maintenance](#monitoring--maintenance-storage)
+15. [Reflection & Key Learnings](#reflection--key-learnings-storage)
+
+---
+
+## Why Object Storage?
+
+Object storage provides scalable, durable, and cost-effective file storage in the cloud:
+
+| Benefit | Description |
+|---------|-------------|
+| **Scalability** | Store unlimited files without managing disk space |
+| **Durability** | 99.999999999% (11 nines) durability - your files are safe |
+| **Performance** | Global CDN integration, fast downloads worldwide |
+| **Cost-Effective** | Pay only for what you store and transfer (~$0.023/GB/month) |
+| **Security** | Built-in encryption, access control, audit logging |
+| **Serverless** | No server management, automatic scaling |
+
+**Why Presigned URLs?**
+- Direct uploads bypass your server (saves bandwidth & compute)
+- Temporary access (15 min expiry) prevents unauthorized use
+- No need to expose storage credentials to clients
+- Better performance for large files (GB+ uploads)
+
+---
+
+## Provider Comparison
+
+| Feature | AWS S3 | Azure Blob Storage |
+|---------|--------|-------------------|
+| **Pricing** | $0.023/GB/month (Standard) | $0.0184/GB/month (Hot tier) |
+| **Free Tier** | 5 GB for 12 months | N/A |
+| **Min Storage** | None | None |
+| **Durability** | 99.999999999% (11 nines) | 99.999999999% (11 nines) |
+| **Availability** | 99.99% | 99.9% (LRS), 99.99% (ZRS) |
+| **Redundancy** | S3 Standard, S3-IA, Glacier | Hot, Cool, Archive tiers |
+| **CDN** | CloudFront | Azure CDN |
+| **Encryption** | AES-256 (at rest), TLS (in transit) | AES-256 (at rest), TLS (in transit) |
+| **Access Control** | IAM, Bucket Policies, ACLs | RBAC, SAS tokens, Storage Keys |
+| **Temporary Access** | Presigned URLs | SAS tokens |
+| **SDK** | @aws-sdk/client-s3 | @azure/storage-blob |
+| **Lifecycle** | Transition, Expiration rules | Lifecycle management policies |
+| **Versioning** | Yes | Yes |
+| **Regions** | 30+ | 60+ |
+
+**Recommendation**: 
+- Choose **AWS S3** if you're already using AWS services (RDS, Lambda, etc.)
+- Choose **Azure Blob** if you're using Azure services (PostgreSQL, Functions, etc.)
+- Both are production-ready and offer similar capabilities
+
+---
+
+## AWS S3 Setup
+
+### Automated Setup (Recommended)
+
+Run the automated setup script to create and configure your S3 bucket:
+
+```bash
+cd trust-x
+chmod +x scripts/setup-aws-s3.sh
+./scripts/setup-aws-s3.sh
+```
+
+**What the script does**:
+1. Creates S3 bucket with unique name
+2. Blocks all public access (security)
+3. Enables bucket versioning
+4. Enables server-side encryption (AES-256)
+5. Configures CORS for browser uploads
+6. Sets up lifecycle policies (delete temp files after 30 days)
+7. Creates IAM user with minimal permissions
+8. Generates access keys
+9. Saves credentials to `s3-credentials-YYYYMMDD-HHMMSS.txt`
+
+**Expected Output**:
+```
+========================================
+AWS S3 Setup Complete!
+========================================
+
+✓ Credentials saved to: s3-credentials-20251231-120000.txt
+
+Your S3 Configuration:
+  Bucket Name: trustx-storage-1234567890
+  Region: us-east-1
+  IAM User: trustx-storage-uploader
+  Bucket URL: https://trustx-storage-1234567890.s3.us-east-1.amazonaws.com
+
+Environment Variables (add to .env.local):
+AWS_S3_BUCKET_NAME="trustx-storage-1234567890"
+AWS_REGION="us-east-1"
+AWS_ACCESS_KEY_ID="AKIA..."
+AWS_SECRET_ACCESS_KEY="..."
+```
+
+### Manual Setup (AWS Console)
+
+If you prefer to set up manually:
+
+1. **Create S3 Bucket**:
+   - Go to [AWS Console → S3](https://s3.console.aws.amazon.com/s3/buckets)
+   - Click "Create bucket"
+   - Bucket name: `your-app-storage-unique` (must be globally unique)
+   - Region: Select closest to your users
+   - Block all public access: **✓ Enabled** (keep files private)
+   - Bucket Versioning: **Enabled**
+   - Default encryption: **AES-256 (SSE-S3)**
+   - Click "Create bucket"
+
+2. **Configure CORS**:
+   - Open your bucket → Permissions → CORS
+   - Add this configuration:
+   ```json
+   [
+     {
+       "AllowedHeaders": ["*"],
+       "AllowedMethods": ["GET", "PUT", "POST", "DELETE"],
+       "AllowedOrigins": ["http://localhost:3000", "https://your-domain.com"],
+       "ExposeHeaders": ["ETag"],
+       "MaxAgeSeconds": 3000
+     }
+   ]
+   ```
+
+3. **Set Lifecycle Policy**:
+   - Bucket → Management → Lifecycle rules
+   - Create rule: "Delete temp files"
+   - Scope: Prefix `temp/`
+   - Expiration: Delete after 30 days
+   - Create rule: "Transition to IA"
+   - Scope: All objects
+   - Transition: Move to Standard-IA after 90 days
+
+4. **Create IAM User**:
+   - Go to [IAM → Users](https://console.aws.amazon.com/iam/home#/users)
+   - Create user: `storage-uploader`
+   - Attach policy (create custom):
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       {
+         "Effect": "Allow",
+         "Action": [
+           "s3:PutObject",
+           "s3:GetObject",
+           "s3:DeleteObject",
+           "s3:ListBucket"
+         ],
+         "Resource": [
+           "arn:aws:s3:::your-bucket-name",
+           "arn:aws:s3:::your-bucket-name/*"
+         ]
+       }
+     ]
+   }
+   ```
+   - Generate Access Key → Save credentials securely
+
+---
+
+## Azure Blob Storage Setup
+
+### Automated Setup (Recommended)
+
+Run the automated setup script:
+
+```bash
+cd trust-x
+chmod +x scripts/setup-azure-blob.sh
+./scripts/setup-azure-blob.sh
+```
+
+**Prerequisites**:
+- Azure CLI installed (`az --version`)
+- Logged in (`az login`)
+
+**What the script does**:
+1. Creates resource group
+2. Creates storage account (Standard_LRS, StorageV2)
+3. Enforces HTTPS-only access
+4. Enables blob versioning
+5. Enables soft delete (7 days)
+6. Creates container (`uploads`) with private access
+7. Configures CORS for browser uploads
+8. Sets up lifecycle policies
+9. Generates SAS token (1 year validity)
+10. Saves credentials to `azure-blob-credentials-YYYYMMDD-HHMMSS.txt`
+
+**Expected Output**:
+```
+========================================
+Azure Blob Storage Setup Complete!
+========================================
+
+✓ Credentials saved to: azure-blob-credentials-20251231-120000.txt
+
+Your Azure Blob Storage Configuration:
+  Storage Account: trustxstorage1234567890
+  Container: uploads
+  Resource Group: trustx-storage-rg
+  Location: eastus
+  Blob Endpoint: https://trustxstorage1234567890.blob.core.windows.net/
+
+Environment Variables (add to .env.local):
+AZURE_STORAGE_ACCOUNT_NAME="trustxstorage1234567890"
+AZURE_STORAGE_CONTAINER_NAME="uploads"
+AZURE_STORAGE_ACCOUNT_KEY="..."
+AZURE_STORAGE_CONNECTION_STRING="..."
+```
+
+### Manual Setup (Azure Portal)
+
+1. **Create Storage Account**:
+   - Go to [Azure Portal → Storage accounts](https://portal.azure.com/#create/Microsoft.StorageAccount)
+   - Resource group: Create new `trustx-storage-rg`
+   - Storage account name: `yourstorageaccount` (lowercase, 3-24 chars)
+   - Region: Select closest to users
+   - Performance: **Standard**
+   - Redundancy: **LRS** (Locally Redundant)
+   - Advanced → Security:
+     - Require secure transfer: **Enabled**
+     - Enable blob public access: **Disabled**
+     - Minimum TLS version: **1.2**
+   - Review + Create
+
+2. **Create Container**:
+   - Open storage account → Containers
+   - New container: `uploads`
+   - Public access level: **Private (no anonymous access)**
+
+3. **Configure CORS**:
+   - Storage account → Resource sharing (CORS)
+   - Blob service → Add rule:
+     - Allowed origins: `http://localhost:3000,https://your-domain.com`
+     - Allowed methods: `GET,PUT,POST,DELETE`
+     - Allowed headers: `*`
+     - Exposed headers: `*`
+     - Max age: `3600`
+
+4. **Enable Lifecycle Management**:
+   - Storage account → Lifecycle management
+   - Add rule: Delete temp files after 30 days (prefix: `temp/`)
+   - Add rule: Move to Cool tier after 90 days
+
+5. **Get Access Keys**:
+   - Storage account → Access keys
+   - Copy Key 1 and Connection string
+   - Save securely (rotate every 90 days)
+
+---
+
+## Application Configuration
+
+### 1. Install Dependencies
+
+AWS SDK and Azure SDK are already installed in `package.json`:
+
+```json
+"dependencies": {
+  "@aws-sdk/client-s3": "^3.956.0",
+  "@aws-sdk/s3-request-presigner": "^3.956.0",
+  "@azure/storage-blob": "^12.24.0"
+}
+```
+
+If not installed:
+```bash
+npm install @aws-sdk/client-s3 @aws-sdk/s3-request-presigner @azure/storage-blob
+```
+
+### 2. Configure Environment Variables
+
+Create/update `.env.local` with your storage provider credentials:
+
+**For AWS S3**:
+```env
+STORAGE_PROVIDER=aws
+
+AWS_S3_BUCKET_NAME="trustx-storage-1234567890"
+AWS_REGION="us-east-1"
+AWS_ACCESS_KEY_ID="AKIA..."
+AWS_SECRET_ACCESS_KEY="..."
+```
+
+**For Azure Blob**:
+```env
+STORAGE_PROVIDER=azure
+
+AZURE_STORAGE_ACCOUNT_NAME="trustxstorage1234567890"
+AZURE_STORAGE_CONTAINER_NAME="uploads"
+AZURE_STORAGE_ACCOUNT_KEY="..."
+AZURE_STORAGE_CONNECTION_STRING="DefaultEndpointsProtocol=https;AccountName=..."
+```
+
+**Copy from credentials file**:
+```bash
+# AWS
+cat s3-credentials-*.txt >> .env.local
+
+# Azure
+cat azure-blob-credentials-*.txt >> .env.local
+```
+
+### 3. Update CORS for Production
+
+Before deploying, update CORS origins to include your production domain:
+
+**AWS S3**:
+```bash
+aws s3api put-bucket-cors \
+  --bucket your-bucket-name \
+  --cors-configuration '{
+    "CORSRules": [{
+      "AllowedHeaders": ["*"],
+      "AllowedMethods": ["GET", "PUT", "POST", "DELETE"],
+      "AllowedOrigins": ["https://your-production-domain.com"],
+      "ExposeHeaders": ["ETag"],
+      "MaxAgeSeconds": 3000
+    }]
+  }'
+```
+
+**Azure Blob**:
+```bash
+az storage cors add \
+  --services b \
+  --methods GET PUT POST DELETE \
+  --origins "https://your-production-domain.com" \
+  --allowed-headers "*" \
+  --account-name your-storage-account
+```
+
+---
+
+## Upload Flow Architecture
+
+The upload process uses a **3-step flow** for security and performance:
+
+```
+┌─────────┐      1. Request URL       ┌────────────┐
+│ Client  │ ───────────────────────> │ Next.js API │
+│(Browser)│                            │   /presigned│
+└─────────┘                            └────────────┘
+     │                                        │
+     │                          2. Generate Presigned URL
+     │                                        │
+     │                                        ▼
+     │                               ┌─────────────────┐
+     │              ◄────────────────│ AWS S3 / Azure  │
+     │                 Presigned URL  │  Blob Storage   │
+     │                               └─────────────────┘
+     │                                        ▲
+     │      3. PUT file directly              │
+     └────────────────────────────────────────┘
+     │                                        │
+     │      4. Notify completion       ┌────────────┐
+     └─────────────────────────────> │ Next.js API │
+                                      │  /complete  │
+                                      └────────────┘
+                                            │
+                                  5. Verify & Save metadata
+                                            ▼
+                                       ┌──────────┐
+                                       │ Database │
+                                       └──────────┘
+```
+
+### Step-by-Step Flow
+
+**Step 1: Client Requests Upload URL**
+```typescript
+const response = await fetch('/api/upload/presigned-url', {
+  method: 'POST',
+  body: JSON.stringify({
+    fileName: 'document.pdf',
+    fileType: 'application/pdf',
+    fileSize: 1024000,
+    folder: 'uploads'
+  })
+});
+
+const { uploadUrl, publicUrl, key } = await response.json();
+```
+
+**Step 2: Server Generates Presigned URL**
+- Validates file type and size
+- Generates temporary URL (15 min expiry)
+- Returns uploadUrl + publicUrl + key
+
+**Step 3: Client Uploads Directly to Cloud**
+```typescript
+await fetch(uploadUrl, {
+  method: 'PUT',
+  body: file,
+  headers: { 'Content-Type': file.type }
+});
+```
+
+**Step 4: Client Notifies Server**
+```typescript
+await fetch('/api/upload/complete', {
+  method: 'POST',
+  body: JSON.stringify({
+    key, fileName, fileType, fileSize, publicUrl
+  })
+});
+```
+
+**Step 5: Server Verifies & Saves**
+- Checks file exists in storage
+- Saves metadata to database
+- Returns file record
+
+---
+
+## File Validation
+
+All uploads are validated **before** presigned URL generation:
+
+### Allowed File Types
+
+```typescript
+const ALLOWED_TYPES = [
+  // Images
+  'image/png', 'image/jpeg', 'image/jpg', 'image/gif',
+  'image/webp', 'image/svg+xml',
+  
+  // Documents
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  
+  // Archives
+  'application/zip', 'application/x-zip-compressed',
+  
+  // Text
+  'text/plain', 'text/csv'
+];
+```
+
+### Size Limits
+
+- **Default**: 10 MB per file
+- **Configurable** in `src/lib/storage.ts`:
+```typescript
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+```
+
+### Client-Side Validation
+
+```typescript
+// Before requesting presigned URL
+if (!ALLOWED_TYPES.includes(file.type)) {
+  alert('File type not allowed!');
+  return;
+}
+
+if (file.size > 10 * 1024 * 1024) {
+  alert('File too large! Max 10MB');
+  return;
+}
+```
+
+### Server-Side Validation
+
+```typescript
+// In /api/upload/presigned-url
+const validation = validateFile(fileName, fileType, fileSize);
+if (!validation.valid) {
+  return errorResponse(validation.error, 400);
+}
+```
+
+---
+
+## API Endpoints
+
+### 1. GET /api/upload/presigned-url
+
+Get upload configuration (allowed types, max size, provider).
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "allowedTypes": ["image/png", "image/jpeg", ...],
+    "maxFileSize": 10485760,
+    "maxFileSizeMB": "10.00",
+    "provider": "aws"
+  }
+}
+```
+
+### 2. POST /api/upload/presigned-url
+
+Generate presigned URL for file upload.
+
+**Request**:
+```json
+{
+  "fileName": "document.pdf",
+  "fileType": "application/pdf",
+  "fileSize": 1024000,
+  "folder": "uploads"
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "uploadUrl": "https://bucket.s3.region.amazonaws.com/key?X-Amz-...",
+    "publicUrl": "https://bucket.s3.region.amazonaws.com/key",
+    "expiresAt": "2025-12-31T12:15:00.000Z",
+    "fileName": "document.pdf",
+    "key": "uploads/document-1234567890-abc123.pdf"
+  }
+}
+```
+
+**Upload to URL**:
+```typescript
+await fetch(uploadUrl, {
+  method: 'PUT',
+  body: file,
+  headers: { 'Content-Type': fileType }
+});
+```
+
+### 3. POST /api/upload/complete
+
+Verify upload and save metadata.
+
+**Request**:
+```json
+{
+  "key": "uploads/document-1234567890-abc123.pdf",
+  "fileName": "document.pdf",
+  "fileType": "application/pdf",
+  "fileSize": 1024000,
+  "publicUrl": "https://..."
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "id": "cm5x...",
+    "name": "document.pdf",
+    "url": "https://...",
+    "size": 1024000,
+    "type": "application/pdf",
+    "uploadedAt": "2025-12-31T12:00:00.000Z"
+  }
+}
+```
+
+### 4. GET /api/upload/complete
+
+Get upload history with pagination.
+
+**Query Params**:
+- `limit`: Number of records (default: 20)
+- `offset`: Skip records (default: 0)
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "files": [...],
+    "total": 42,
+    "limit": 20,
+    "offset": 0,
+    "hasMore": true
+  }
+}
+```
+
+### 5. DELETE /api/upload/complete?id={fileId}
+
+Delete file from storage and database.
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": { "id": "cm5x..." }
+}
+```
+
+### 6. GET /api/upload/health
+
+Check storage health and connectivity.
+
+**Response** (Healthy):
+```json
+{
+  "success": true,
+  "data": {
+    "healthy": true,
+    "provider": "aws-s3",
+    "message": "S3 storage is accessible",
+    "details": {
+      "bucket": "trustx-storage-1234567890",
+      "region": "us-east-1"
+    }
+  }
+}
+```
+
+---
+
+## Testing Your Setup
+
+### 1. Automated Test Script
+
+Run comprehensive test suite:
+
+```bash
+npm run test:upload
+```
+
+**Tests**:
+1. ✓ Upload configuration loaded
+2. ✓ Storage health check passed
+3. ✓ File upload completed
+
+**Expected Output**:
+```
+╔════════════════════════════════════════╗
+║   Cloud Storage Upload Test Suite     ║
+╚════════════════════════════════════════╝
+
+Test 1: Check Upload Configuration
+========================================
+✓ Upload configuration loaded successfully
+  Provider: aws
+  Max File Size: 10MB
+  Allowed Types: 14 types
+
+Test 2: Check Storage Health
+========================================
+✓ Storage is healthy (aws-s3)
+  Message: S3 storage is accessible
+  bucket: trustx-storage-1234567890
+  region: us-east-1
+
+Test 3: Upload File
+========================================
+Step 1: Requesting presigned URL...
+✓ Presigned URL generated
+  Key: test-uploads/test-upload-1234567890-abc123.txt
+  Expires: 12/31/2025, 12:15:00 PM
+
+Step 2: Uploading to cloud storage...
+✓ File uploaded to cloud storage
+
+Step 3: Verifying upload...
+✓ Upload completed and verified
+  File ID: cm5x...
+  Public URL: https://...
+
+========================================
+Test Summary
+========================================
+✓ Configuration: PASSED
+✓ Storage Health: PASSED
+✓ File Upload: PASSED
+
+3/3 tests passed
+
+✓ All tests passed! Cloud storage is working correctly.
+```
+
+### 2. Interactive Upload Test Page
+
+Visit the upload test page:
+
+```
+http://localhost:3000/upload-test
+```
+
+**Features**:
+- View upload configuration
+- Select and validate files
+- Upload with progress bar
+- View upload history
+- Delete uploaded files
+
+**Test Flow**:
+1. Click "Select File"
+2. Choose a file (< 10MB, allowed type)
+3. Click "Upload to Cloud Storage"
+4. Watch progress: 0% → 30% → 70% → 100%
+5. File appears in "Recent Uploads"
+6. Click "View" to see in storage
+7. Click "Delete" to remove
+
+### 3. Health Check
+
+Test storage connectivity:
+
+```bash
+npm run storage:health
+
+# Or with curl
+curl http://localhost:3000/api/upload/health
+```
+
+### 4. Manual cURL Test
+
+**Step 1: Get presigned URL**:
+```bash
+curl -X POST http://localhost:3000/api/upload/presigned-url \
+  -H "Content-Type: application/json" \
+  -d '{
+    "fileName": "test.txt",
+    "fileType": "text/plain",
+    "fileSize": 1024,
+    "folder": "test"
+  }' | jq
+```
+
+**Step 2: Upload file**:
+```bash
+# Save uploadUrl from previous response
+curl -X PUT "UPLOAD_URL_FROM_STEP_1" \
+  -H "Content-Type: text/plain" \
+  --data-binary "@test.txt"
+```
+
+**Step 3: Verify**:
+```bash
+curl -X POST http://localhost:3000/api/upload/complete \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "KEY_FROM_STEP_1",
+    "fileName": "test.txt",
+    "fileType": "text/plain",
+    "fileSize": 1024,
+    "publicUrl": "PUBLIC_URL_FROM_STEP_1"
+  }' | jq
+```
+
+### 5. Cloud Console Verification
+
+**AWS S3**:
+1. Go to [S3 Console](https://s3.console.aws.amazon.com/s3/buckets/)
+2. Open your bucket
+3. Navigate to `test-uploads/` or `uploads/`
+4. Verify file exists with correct name and size
+
+**Azure Blob**:
+1. Go to [Azure Portal → Storage Accounts](https://portal.azure.com/#blade/HubsExtension/BrowseResource/resourceType/Microsoft.Storage%2FStorageAccounts)
+2. Open your storage account
+3. Containers → `uploads`
+4. Verify blob exists
+
+---
+
+## Security Best Practices
+
+### 1. Private Buckets/Containers
+
+**Always** block public access:
+
+✅ **AWS S3**:
+```bash
+aws s3api put-public-access-block \
+  --bucket your-bucket \
+  --public-access-block-configuration \
+  "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
+```
+
+✅ **Azure Blob**:
+```bash
+az storage account update \
+  --name your-account \
+  --allow-blob-public-access false
+```
+
+❌ **Never** make buckets public unless absolutely necessary.
+
+### 2. Minimal IAM Permissions
+
+Grant only required permissions:
+
+**AWS IAM Policy** (minimal):
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Action": [
+      "s3:PutObject",     // Upload
+      "s3:GetObject",     // Download
+      "s3:DeleteObject",  // Delete
+      "s3:ListBucket"     // List
+    ],
+    "Resource": [
+      "arn:aws:s3:::your-bucket",
+      "arn:aws:s3:::your-bucket/*"
+    ]
+  }]
+}
+```
+
+**Azure SAS Permissions** (minimal):
+- Read (r)
+- Create (c)
+- Write (w)
+- Delete (d) - optional
+
+### 3. Short-Lived Presigned URLs
+
+Set expiry to **15 minutes** (default):
+
+```typescript
+const expiresIn = 60 * 15; // 15 minutes
+
+// AWS
+const url = await getSignedUrl(client, command, { expiresIn });
+
+// Azure
+const expiresOn = new Date(Date.now() + expiresIn * 1000);
+```
+
+### 4. HTTPS/TLS Enforcement
+
+**AWS S3**:
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Deny",
+    "Principal": "*",
+    "Action": "s3:*",
+    "Resource": "arn:aws:s3:::your-bucket/*",
+    "Condition": {
+      "Bool": { "aws:SecureTransport": "false" }
+    }
+  }]
+}
+```
+
+**Azure Blob**:
+```bash
+az storage account update \
+  --name your-account \
+  --https-only true \
+  --min-tls-version TLS1_2
+```
+
+### 5. Encryption at Rest
+
+✅ **AWS S3**: AES-256 (SSE-S3) enabled by default
+✅ **Azure Blob**: AES-256 enabled by default
+
+Verify:
+```bash
+# AWS
+aws s3api get-bucket-encryption --bucket your-bucket
+
+# Azure
+az storage account show --name your-account --query encryption
+```
+
+### 6. CORS Configuration
+
+Only allow your domains:
+
+```json
+{
+  "AllowedOrigins": [
+    "https://your-production-domain.com",
+    "http://localhost:3000"  // Remove in production
+  ]
+}
+```
+
+### 7. Credential Rotation
+
+**Rotate access keys every 90 days**:
+
+```bash
+# AWS: Create new key
+aws iam create-access-key --user-name storage-uploader
+
+# Update .env.local with new key
+
+# Delete old key (after testing)
+aws iam delete-access-key --user-name storage-uploader --access-key-id OLD_KEY
+
+# Azure: Rotate storage account key
+az storage account keys renew --name your-account --key key1
+```
+
+### 8. Audit Logging
+
+**AWS S3**: Enable CloudTrail logging
+```bash
+aws s3api put-bucket-logging \
+  --bucket your-bucket \
+  --bucket-logging-status '{
+    "LoggingEnabled": {
+      "TargetBucket": "your-logs-bucket",
+      "TargetPrefix": "s3-access-logs/"
+    }
+  }'
+```
+
+**Azure Blob**: Enable diagnostic logs
+```bash
+az monitor diagnostic-settings create \
+  --resource your-account-id \
+  --name storage-logs \
+  --logs '[{
+    "category": "StorageRead",
+    "enabled": true
+  }, {
+    "category": "StorageWrite",
+    "enabled": true
+  }]'
+```
+
+---
+
+## Lifecycle Policies
+
+Automatically manage file lifecycle to reduce costs:
+
+### Temp File Auto-Deletion
+
+Delete temporary files after 30 days:
+
+**AWS S3**:
+```json
+{
+  "Rules": [{
+    "Id": "DeleteTempFilesAfter30Days",
+    "Filter": { "Prefix": "temp/" },
+    "Status": "Enabled",
+    "Expiration": { "Days": 30 }
+  }]
+}
+```
+
+**Azure Blob**:
+```json
+{
+  "rules": [{
+    "enabled": true,
+    "name": "DeleteTempFilesAfter30Days",
+    "type": "Lifecycle",
+    "definition": {
+      "actions": {
+        "baseBlob": {
+          "delete": { "daysAfterModificationGreaterThan": 30 }
+        }
+      },
+      "filters": {
+        "blobTypes": ["blockBlob"],
+        "prefixMatch": ["temp/"]
+      }
+    }
+  }]
+}
+```
+
+### Tier Transitions
+
+Move old files to cheaper storage:
+
+**AWS S3**: Standard → Standard-IA (90 days) → Glacier (180 days)
+```json
+{
+  "Rules": [{
+    "Id": "TransitionToIA",
+    "Status": "Enabled",
+    "Transitions": [
+      {
+        "Days": 90,
+        "StorageClass": "STANDARD_IA"
+      },
+      {
+        "Days": 180,
+        "StorageClass": "GLACIER"
+      }
+    ]
+  }]
+}
+```
+
+**Azure Blob**: Hot → Cool (90 days) → Archive (180 days)
+```json
+{
+  "rules": [{
+    "enabled": true,
+    "name": "TierTransitions",
+    "type": "Lifecycle",
+    "definition": {
+      "actions": {
+        "baseBlob": {
+          "tierToCool": { "daysAfterModificationGreaterThan": 90 },
+          "tierToArchive": { "daysAfterModificationGreaterThan": 180 }
+        }
+      }
+    }
+  }]
+}
+```
+
+**Cost Savings**:
+| Tier | AWS Cost | Azure Cost | Savings |
+|------|----------|------------|---------|
+| Standard/Hot | $0.023/GB | $0.0184/GB | Baseline |
+| IA/Cool | $0.0125/GB | $0.01/GB | 45-50% |
+| Glacier/Archive | $0.004/GB | $0.002/GB | 80-90% |
+
+---
+
+## Cost Optimization
+
+### Storage Costs
+
+| Component | AWS S3 | Azure Blob | Notes |
+|-----------|--------|------------|-------|
+| **Storage (Standard/Hot)** | $0.023/GB/month | $0.0184/GB/month | First 50 GB |
+| **Storage (IA/Cool)** | $0.0125/GB/month | $0.01/GB/month | After 90 days |
+| **PUT Requests** | $0.005/1000 | $0.05/10000 | Uploads |
+| **GET Requests** | $0.0004/1000 | $0.004/10000 | Downloads |
+| **Data Transfer Out** | $0.09/GB | $0.087/GB | First GB free |
+| **Data Transfer In** | Free | Free | Uploads always free |
+
+### Example: 1,000 Users
+
+**Assumptions**:
+- 10 uploads per user per month (10,000 uploads)
+- 2 MB average file size (20 GB total)
+- 3 downloads per file (30,000 downloads)
+- 20% traffic outside region
+
+**AWS S3 Monthly Cost**:
+```
+Storage:      20 GB × $0.023 = $0.46
+PUT requests: 10,000 × $0.005/1000 = $0.05
+GET requests: 30,000 × $0.0004/1000 = $0.012
+Data out:     4 GB × $0.09 = $0.36
+Total:        $0.88/month
+```
+
+**Azure Blob Monthly Cost**:
+```
+Storage:      20 GB × $0.0184 = $0.37
+PUT requests: 10,000 × $0.05/10000 = $0.05
+GET requests: 30,000 × $0.004/10000 = $0.012
+Data out:     4 GB × $0.087 = $0.35
+Total:        $0.78/month
+```
+
+### Cost Optimization Tips
+
+1. **Use Lifecycle Policies**: Automatically move old files to cheaper tiers
+   - Save 45-50% after 90 days (IA/Cool)
+   - Save 80-90% after 180 days (Glacier/Archive)
+
+2. **Delete Temp Files**: Set expiration for temporary uploads
+   ```typescript
+   folder: 'temp/'  // Auto-deleted after 30 days
+   ```
+
+3. **Enable Compression**: Compress files before upload
+   ```typescript
+   // Client-side compression
+   import pako from 'pako';
+   const compressed = pako.gzip(fileBuffer);
+   ```
+
+4. **Use CDN**: Cache frequently accessed files
+   - AWS: CloudFront ($0.085/GB)
+   - Azure: Azure CDN ($0.081/GB)
+
+5. **Monitor Usage**: Set billing alerts
+   ```bash
+   # AWS
+   aws budgets create-budget \
+     --account-id 123456789012 \
+     --budget '{
+       "BudgetName": "S3-Monthly",
+       "BudgetLimit": { "Amount": "10", "Unit": "USD" },
+       "TimeUnit": "MONTHLY"
+     }'
+   ```
+
+6. **Optimize Uploads**: Use multipart for large files (> 5 MB)
+
+---
+
+## Troubleshooting
+
+### Issue 1: "Access Denied" Error
+
+**Symptoms**:
+```
+Access Denied
+<Code>AccessDenied</Code>
+```
+
+**Causes**:
+- Invalid access keys
+- IAM user lacks permissions
+- Bucket policy blocks access
+
+**Solutions**:
+
+1. **Verify credentials**:
+   ```bash
+   # AWS
+   aws s3 ls s3://your-bucket --profile storage-uploader
+
+   # Azure
+   az storage container list --account-name your-account --account-key YOUR_KEY
+   ```
+
+2. **Check IAM permissions**:
+   ```bash
+   aws iam list-user-policies --user-name storage-uploader
+   aws iam list-attached-user-policies --user-name storage-uploader
+   ```
+
+3. **Test bucket access**:
+   ```bash
+   # Upload test file
+   echo "test" > test.txt
+   aws s3 cp test.txt s3://your-bucket/test.txt
+   ```
+
+### Issue 2: CORS Error in Browser
+
+**Symptoms**:
+```
+Access to fetch at 'https://bucket.s3...' from origin 'http://localhost:3000' 
+has been blocked by CORS policy
+```
+
+**Causes**:
+- CORS not configured
+- Origin not in allowed list
+- Method not allowed
+
+**Solutions**:
+
+1. **Check CORS configuration**:
+   ```bash
+   # AWS
+   aws s3api get-bucket-cors --bucket your-bucket
+
+   # Azure
+   az storage cors list --services b --account-name your-account
+   ```
+
+2. **Update CORS**:
+   ```bash
+   # AWS
+   aws s3api put-bucket-cors --bucket your-bucket --cors-configuration file://cors.json
+
+   # Azure
+   az storage cors add --services b --methods GET PUT POST DELETE \
+     --origins "http://localhost:3000" --account-name your-account
+   ```
+
+3. **Verify origin matches exactly** (no trailing slash):
+   - ✅ `http://localhost:3000`
+   - ❌ `http://localhost:3000/`
+
+### Issue 3: "Signature Expired" Error
+
+**Symptoms**:
+```
+Request has expired
+<Code>SignatureDoesNotMatch</Code>
+```
+
+**Causes**:
+- Presigned URL expired (> 15 min)
+- System clock out of sync
+
+**Solutions**:
+
+1. **Check system time**:
+   ```bash
+   date
+   # Should match current time
+   ```
+
+2. **Sync system clock**:
+   ```bash
+   # Linux/Mac
+   sudo ntpdate -s time.nist.gov
+
+   # Windows
+   w32tm /resync
+   ```
+
+3. **Increase expiry** (if needed):
+   ```typescript
+   expiresIn: 60 * 30  // 30 minutes
+   ```
+
+### Issue 4: Upload Fails Silently
+
+**Symptoms**:
+- File doesn't appear in storage
+- No error message
+- Health check passes
+
+**Causes**:
+- File validation failed
+- Presigned URL not used correctly
+- CORS preflight failed
+
+**Solutions**:
+
+1. **Check browser console** for errors
+
+2. **Verify file validation**:
+   ```bash
+   curl -X POST http://localhost:3000/api/upload/presigned-url \
+     -H "Content-Type: application/json" \
+     -d '{"fileName":"test.txt","fileType":"text/plain","fileSize":1024}'
+   ```
+
+3. **Test upload manually**:
+   ```bash
+   curl -X PUT "PRESIGNED_URL" \
+     -H "Content-Type: text/plain" \
+     --data-binary "@test.txt" \
+     -v  # Verbose output
+   ```
+
+4. **Check server logs**:
+   ```bash
+   # Check Next.js logs for errors
+   # Look for [storage] or [upload] prefixed logs
+   ```
+
+### Issue 5: "File Not Found" After Upload
+
+**Symptoms**:
+```
+File not found in storage. Upload may have failed.
+```
+
+**Causes**:
+- Upload to wrong bucket/container
+- File key mismatch
+- Eventual consistency delay
+
+**Solutions**:
+
+1. **Wait 1-2 seconds** before verification (eventual consistency)
+
+2. **Check correct bucket**:
+   ```bash
+   # AWS
+   aws s3 ls s3://your-bucket/uploads/
+
+   # Azure
+   az storage blob list --container-name uploads --account-name your-account
+   ```
+
+3. **Verify file key matches**:
+   ```typescript
+   // In /api/upload/complete
+   console.log('Checking key:', key);
+   const exists = await fileExists(key);
+   console.log('Exists:', exists);
+   ```
+
+### Issue 6: Large Files Fail
+
+**Symptoms**:
+- Files > 5 MB fail to upload
+- Timeout errors
+- Connection reset
+
+**Causes**:
+- Single PUT limit (5 GB for S3, 5 TB for Azure)
+- Network timeout
+- API Gateway timeout (30s)
+
+**Solutions**:
+
+1. **Use multipart upload** for files > 100 MB:
+   ```typescript
+   // AWS S3 multipart
+   import { S3Client, CreateMultipartUploadCommand } from '@aws-sdk/client-s3';
+   
+   // Split file into parts, upload each part
+   // Complete multipart upload
+   ```
+
+2. **Increase timeout**:
+   ```typescript
+   // In presigned URL generation
+   expiresIn: 60 * 60  // 1 hour for large files
+   ```
+
+3. **Client-side progress tracking**:
+   ```typescript
+   const xhr = new XMLHttpRequest();
+   xhr.upload.addEventListener('progress', (e) => {
+     const percent = (e.loaded / e.total) * 100;
+     setProgress(percent);
+   });
+   ```
+
+### Issue 7: High Costs
+
+**Symptoms**:
+- Unexpectedly high AWS/Azure bill
+- Storage costs increasing
+
+**Causes**:
+- No lifecycle policies
+- Unused files not deleted
+- High egress traffic
+
+**Solutions**:
+
+1. **Check storage usage**:
+   ```bash
+   # AWS
+   aws s3 ls s3://your-bucket --recursive --human-readable --summarize
+
+   # Azure
+   az storage blob list --container-name uploads --account-name your-account | wc -l
+   ```
+
+2. **Enable lifecycle policies** (see [Lifecycle Policies](#lifecycle-policies))
+
+3. **Delete old files**:
+   ```bash
+   # AWS: Delete files older than 90 days
+   aws s3 ls s3://your-bucket --recursive | \
+     awk '$1 < "'$(date --date='90 days ago' +%Y-%m-%d)'" {print $4}' | \
+     xargs -I {} aws s3 rm s3://your-bucket/{}
+   ```
+
+4. **Set billing alerts** (see [Cost Optimization](#cost-optimization))
+
+---
+
+## Monitoring & Maintenance
+
+### Health Checks
+
+**Automated Health Check**:
+```bash
+# Run every 5 minutes via cron
+*/5 * * * * curl -f http://localhost:3000/api/upload/health || echo "Storage unhealthy"
+```
+
+**Manual Health Check**:
+```bash
+npm run storage:health
+```
+
+### Metrics to Monitor
+
+| Metric | AWS | Azure | Alert Threshold |
+|--------|-----|-------|----------------|
+| **Storage Size** | CloudWatch: `BucketSizeBytes` | Monitor: `BlobCapacity` | > 80% quota |
+| **Request Count** | CloudWatch: `AllRequests` | Monitor: `Transactions` | Unusual spike |
+| **Error Rate** | CloudWatch: `4xxErrors`, `5xxErrors` | Monitor: `ClientOtherError` | > 1% |
+| **Availability** | CloudWatch: `Availability` | Monitor: `Availability` | < 99.9% |
+| **Latency** | CloudWatch: `FirstByteLatency` | Monitor: `SuccessE2ELatency` | > 200ms |
+
+### AWS CloudWatch Dashboard
+
+```bash
+# Create dashboard
+aws cloudwatch put-dashboard \
+  --dashboard-name S3-Storage-Dashboard \
+  --dashboard-body '{
+    "widgets": [{
+      "type": "metric",
+      "properties": {
+        "metrics": [
+          ["AWS/S3", "BucketSizeBytes", {"stat": "Average"}],
+          [".", "NumberOfObjects", {"stat": "Average"}]
+        ],
+        "period": 300,
+        "stat": "Average",
+        "region": "us-east-1",
+        "title": "Storage Metrics"
+      }
+    }]
+  }'
+```
+
+### Azure Monitor Alerts
+
+```bash
+# Create alert for high error rate
+az monitor metrics alert create \
+  --name storage-high-errors \
+  --resource-group trustx-storage-rg \
+  --scopes /subscriptions/.../storageAccounts/your-account \
+  --condition "total ClientOtherError > 10" \
+  --window-size 5m \
+  --evaluation-frequency 1m \
+  --action email your-email@example.com
+```
+
+### Maintenance Schedule
+
+| Task | Frequency | Command |
+|------|-----------|---------|
+| **Rotate Keys** | Every 90 days | See [Security Best Practices](#security-best-practices) |
+| **Review Lifecycle** | Monthly | Check auto-deletion working |
+| **Check Costs** | Weekly | AWS Cost Explorer / Azure Cost Analysis |
+| **Audit Logs** | Monthly | Review access patterns |
+| **Test Restore** | Quarterly | Verify backup/restore works |
+| **Update CORS** | As needed | When adding new domains |
+
+---
+
+## Reflection & Key Learnings
+
+### 1. Direct Uploads Are Critical for Serverless
+
+**Lesson**: Routing large files through your API server is inefficient and expensive.
+
+**Why**:
+- **Bandwidth costs**: 2× the data (client → server → storage)
+- **Compute costs**: Server CPU/memory to proxy files
+- **Latency**: Added hop increases upload time
+- **Limits**: API Gateway 10 MB limit, Lambda 6 MB payload
+
+**Solution**: Presigned URLs enable direct client → storage uploads.
+
+**Trade-off**: More complex client-side logic, but worth it for performance and cost.
+
+---
+
+### 2. File Validation Must Be Server-Side
+
+**Lesson**: Client-side validation is easily bypassed; always validate on server.
+
+**Implementation**:
+```typescript
+// Client (optional, for UX)
+if (!ALLOWED_TYPES.includes(file.type)) {
+  alert('Invalid type');
+  return;
+}
+
+// Server (required, for security)
+const validation = validateFile(fileName, fileType, fileSize);
+if (!validation.valid) {
+  return errorResponse(validation.error, 400);
+}
+```
+
+**Why**: Malicious users can modify client code to bypass validation.
+
+**Best Practice**: Validate **before** generating presigned URL to prevent wasted uploads.
+
+---
+
+### 3. CORS Configuration Is Tricky
+
+**Lesson**: CORS errors are the #1 issue with cloud storage uploads.
+
+**Common Mistakes**:
+- Forgetting to configure CORS
+- Trailing slashes in origins (`http://localhost:3000/` ❌)
+- Not including `PUT` method
+- Not exposing `ETag` header
+
+**Debug Steps**:
+1. Check browser console for CORS error
+2. Verify CORS config in cloud console
+3. Test with `curl -v` to see actual headers
+4. Add `*` origin temporarily to isolate issue
+
+**Production**: Always specify exact origins (never `*` in production).
+
+---
+
+### 4. Presigned URL Expiry Is a Security Feature
+
+**Lesson**: Short expiry (15 min) limits attack window but requires good UX.
+
+**Considerations**:
+- **Too short** (< 5 min): Users with slow connections fail
+- **Too long** (> 1 hour): Security risk if URL leaked
+- **Just right** (15 min): Balance security and UX
+
+**Implementation**:
+```typescript
+const expiresIn = 60 * 15;  // 15 minutes
+```
+
+**UX**: Show expiry time in UI, allow re-request if expired.
+
+---
+
+### 5. Lifecycle Policies Save Money
+
+**Lesson**: Automatic file management reduces storage costs by 50-90%.
+
+**Example**:
+- 100 GB uploads per month
+- Without lifecycle: $2.30/month × 12 months = $27.60/year
+- With lifecycle (90-day transition): ~$15/year (45% savings)
+- With lifecycle (180-day archive): ~$5/year (80% savings)
+
+**Implementation**:
+- Temp files → Delete after 30 days
+- Active files → Move to IA/Cool after 90 days
+- Archive files → Move to Glacier/Archive after 180 days
+
+**Best Practice**: Set up lifecycle policies on day 1, not after costs accumulate.
+
+---
+
+### 6. Bucket/Container Should Be Private
+
+**Lesson**: Public buckets are a major security risk (data leaks, malware hosting).
+
+**Default**: Block all public access.
+
+**Access Control**:
+- ✅ Use presigned URLs for temporary access
+- ✅ Use CloudFront/CDN for public content
+- ❌ Never make bucket public
+
+**Consequences of Public Bucket**:
+- Anyone can list all files
+- Anyone can access private data
+- Search engines index files
+- Malware distribution risk
+
+---
+
+### 7. Monitoring Is Essential
+
+**Lesson**: Without monitoring, you won't know when storage fails or costs spike.
+
+**Key Metrics**:
+- **Health**: Availability, error rate
+- **Performance**: Upload/download latency
+- **Cost**: Storage size, request count, egress
+
+**Alerts**:
+- Storage unhealthy
+- Error rate > 1%
+- Cost > budget
+- Unusual spike in requests
+
+**Implementation**: CloudWatch/Azure Monitor dashboards + alerts.
+
+---
+
+### 8. Testing Before Production
+
+**Lesson**: Test complete upload flow before deploying to production.
+
+**Test Checklist**:
+- ✅ Upload various file types (images, PDFs, large files)
+- ✅ Test file size limits (1 KB, 1 MB, 9 MB, 11 MB)
+- ✅ Test invalid file types
+- ✅ Test expired presigned URLs
+- ✅ Test CORS from different origins
+- ✅ Test upload history and deletion
+- ✅ Verify files appear in cloud console
+- ✅ Test download/access public URLs
+
+**Tools**:
+- `npm run test:upload` (automated)
+- `/upload-test` page (interactive)
+- `curl` (manual API testing)
+
+---
+
+### Future Considerations
+
+1. **Multipart Uploads**: For files > 100 MB, implement multipart upload for reliability
+2. **CDN Integration**: Use CloudFront/Azure CDN for global file delivery
+3. **Image Optimization**: Resize/compress images on upload (Sharp.js)
+4. **Virus Scanning**: Integrate ClamAV or cloud-based antivirus
+5. **Signed URLs for Downloads**: Add presigned URLs for private file downloads
+6. **Metadata Search**: Index file metadata in database for search
+7. **Thumbnails**: Generate thumbnails for images/videos
+8. **Upload Resume**: Support resumable uploads for poor connections
+
+---
+
+## Quick Reference
+
+### Essential Commands
+
+```bash
+# Setup
+./scripts/setup-aws-s3.sh           # Provision AWS S3
+./scripts/setup-azure-blob.sh       # Provision Azure Blob
+
+# Testing
+npm run test:upload                 # Run automated tests
+npm run storage:health              # Check storage health
+
+# Monitoring
+aws s3 ls s3://bucket --recursive   # List all files (AWS)
+az storage blob list --container uploads  # List all blobs (Azure)
+
+# Cleanup
+aws s3 rm s3://bucket/key           # Delete file (AWS)
+az storage blob delete --name key   # Delete blob (Azure)
+```
+
+### Connection Strings
+
+**AWS S3**:
+```env
+STORAGE_PROVIDER=aws
+AWS_S3_BUCKET_NAME="your-bucket"
+AWS_REGION="us-east-1"
+AWS_ACCESS_KEY_ID="AKIA..."
+AWS_SECRET_ACCESS_KEY="..."
+```
+
+**Azure Blob**:
+```env
+STORAGE_PROVIDER=azure
+AZURE_STORAGE_ACCOUNT_NAME="youraccount"
+AZURE_STORAGE_CONTAINER_NAME="uploads"
+AZURE_STORAGE_ACCOUNT_KEY="..."
+AZURE_STORAGE_CONNECTION_STRING="DefaultEndpointsProtocol=https;..."
+```
+
+### Common Issues Quick Fixes
+
+| Issue | Quick Fix |
+|-------|-----------|
+| Access Denied | Check IAM permissions, verify credentials |
+| CORS Error | Update CORS config, verify origin matches |
+| Signature Expired | Sync system clock, increase expiry |
+| File Not Found | Wait 1-2s for consistency, verify key |
+| Upload Fails | Check file size/type validation |
+| High Costs | Enable lifecycle policies, delete old files |
+
+---
+
+**🎉 Object Storage Setup Complete!**
+
+Your Next.js application now supports secure, scalable file uploads to AWS S3 or Azure Blob Storage with presigned URLs, file validation, and comprehensive testing.
+
+**Next Steps**:
+1. Run `npm run test:upload` to verify setup
+2. Visit `/upload-test` to test interactively
+3. Update CORS for your production domain
+4. Set up monitoring alerts
+5. Enable lifecycle policies for cost optimization
+
+For questions or issues, see the [Troubleshooting](#troubleshooting-storage) section above.

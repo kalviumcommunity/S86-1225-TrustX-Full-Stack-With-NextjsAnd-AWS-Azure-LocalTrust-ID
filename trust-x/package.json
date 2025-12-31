@@ -15,7 +15,9 @@
     "format:check": "prettier --check .",
     "test:cache": "node cache-test.js",
     "test:db": "node scripts/test-db-connection.js",
+    "test:upload": "node scripts/test-upload.js",
     "db:health": "curl http://localhost:3000/api/health/db?detailed=true",
+    "storage:health": "curl http://localhost:3000/api/upload/health",
     "db:migrate": "prisma migrate deploy",
     "db:generate": "prisma generate",
     "db:studio": "prisma studio",
@@ -24,6 +26,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.956.0",
     "@aws-sdk/s3-request-presigner": "^3.956.0",
+    "@azure/storage-blob": "^12.29.1",
     "@hookform/resolvers": "^5.2.2",
     "@sendgrid/mail": "^8.1.6",
     "@types/dompurify": "^3.0.5",
