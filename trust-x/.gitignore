@@ -49,6 +49,13 @@ rds-credentials-*.txt
 azure-postgresql-credentials-*.txt
 s3-credentials-*.txt
 azure-blob-credentials-*.txt
+aws-secrets-config-*.txt
+azure-keyvault-config-*.txt
+aws-secrets-iam-policy-*.json
+*-credentials-*.txt
+*-config-*.txt
+*.credentials
+azure-blob-credentials-*.txt
 *-credentials-*.txt
 
 # Test files
