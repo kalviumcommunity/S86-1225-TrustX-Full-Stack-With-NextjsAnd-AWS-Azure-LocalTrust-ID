@@ -1,35 +1,30 @@
-version: '3.9'
+version: '3.8'
 
 services:
   app:
-    build: .
-    container_name: nextjs_app
+    build:
+      context: .
+      dockerfile: Dockerfile
     ports:
       - "3000:3000"
     environment:
-      DATABASE_URL: postgres://postgres:password@db:5432/mydb
-      REDIS_URL: redis://redis:6379
-    depends_on:
-      - db
-      - redis
-
-  db:
-    image: postgres:15-alpine
-    container_name: postgres_db
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: mydb
+      - NODE_ENV=production
+      - DATABASE_URL=file:./dev.db
+      - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key-change-in-production}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:-your-refresh-secret-key}
+      - NEXT_PUBLIC_APP_URL=http://localhost:3000
     volumes:
-      - db_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+      - ./prisma:/app/prisma
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health/db', (res) => { process.exit(res.statusCode === 200 ? 0 : 1); })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - trustx-network
 
-  redis:
-    image: redis:7-alpine
-    container_name: redis_cache
-    ports:
-      - "6379:6379"
-
-volumes:
-  db_data:
+networks:
+  trustx-network:
+    driver: bridge

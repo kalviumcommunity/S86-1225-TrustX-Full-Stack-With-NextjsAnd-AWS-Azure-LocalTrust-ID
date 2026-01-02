@@ -16,7 +16,12 @@ export default function SignupPage() {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
-  } = useForm<SignupFormData>({ resolver: zodResolver(signupSchema) });
+  } = useForm<SignupFormData>({ 
+    resolver: zodResolver(signupSchema),
+    defaultValues: {
+      role: 'USER',
+    },
+  });
 
   const onSubmit = async (data: SignupFormData) => {
     setServerError('');

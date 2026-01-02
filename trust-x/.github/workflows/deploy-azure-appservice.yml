@@ -1,0 +1,56 @@
+name: Deploy to Azure App Service
+
+on:
+  push:
+    branches:
+      - main
+      - production
+  workflow_dispatch:
+
+env:
+  AZURE_WEBAPP_NAME: trustx-app
+  ACR_NAME: trustxregistry
+  ACR_REPOSITORY: trustx-app
+
+jobs:
+  build-and-deploy:
+    name: Build and Deploy to Azure
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Login to Azure Container Registry
+        uses: azure/docker-login@v1
+        with:
+          login-server: ${{ env.ACR_NAME }}.azurecr.io
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Build and push Docker image
+        run: |
+          IMAGE_TAG=${{ github.sha }}
+          docker build -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.ACR_REPOSITORY }}:$IMAGE_TAG .
+          docker tag ${{ env.ACR_NAME }}.azurecr.io/${{ env.ACR_REPOSITORY }}:$IMAGE_TAG \
+            ${{ env.ACR_NAME }}.azurecr.io/${{ env.ACR_REPOSITORY }}:latest
+          
+          docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.ACR_REPOSITORY }}:$IMAGE_TAG
+          docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.ACR_REPOSITORY }}:latest
+
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          images: ${{ env.ACR_NAME }}.azurecr.io/${{ env.ACR_REPOSITORY }}:${{ github.sha }}
+
+      - name: Verify deployment
+        run: |
+          echo "Deployment completed successfully!"
+          echo "App URL: https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net"

@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
   if (origin && !ALLOWED_ORIGINS.includes(origin)) {
     return sendError(
       'Origin not allowed',
-      ERROR_CODES.FORBIDDEN,
+      'VALIDATION_ERROR',
       403
     );
   }

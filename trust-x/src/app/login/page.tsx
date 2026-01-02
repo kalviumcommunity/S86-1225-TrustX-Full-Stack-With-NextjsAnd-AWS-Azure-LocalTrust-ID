@@ -21,9 +21,15 @@ export default function LoginPage() {
       const data = await login(email, password);
 
       if (data.success) {
-        toast.success('Login successful!');
-        // Redirect to dashboard or home
-        router.push('/dashboard');
+        toast.success('Login successful! Redirecting...');
+        
+        // Debug: Check if cookies are set
+        console.log('Cookies after login:', document.cookie);
+        
+        // Small delay to ensure cookies are set before redirect
+        setTimeout(() => {
+          window.location.href = '/dashboard';
+        }, 500);
       } else {
         setError(data.message || 'Login failed');
         toast.error(data.message || 'Login failed');

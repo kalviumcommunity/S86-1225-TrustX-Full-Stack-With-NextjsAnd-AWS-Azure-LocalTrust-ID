@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { verifyAccessToken } from "./lib/jwt";
 
+// Force Node.js runtime to support crypto module for JWT verification
+export const runtime = 'nodejs';
+
 /**
  * Middleware for JWT-based authentication, authorization, and security headers
  * Protects API routes and client-side pages
@@ -116,6 +119,11 @@ export function middleware(req: NextRequest) {
   // Protect client-side pages using cookie-based access token
   if (pathname.startsWith("/dashboard") || pathname.startsWith("/users")) {
     const accessToken = req.cookies.get("accessToken")?.value;
+    
+    // Debug logging
+    console.log('Middleware - Path:', pathname);
+    console.log('Middleware - All cookies:', req.cookies.getAll());
+    console.log('Middleware - Access token:', accessToken ? 'Present' : 'Missing');
 
     if (!accessToken) {
       const loginUrl = new URL("/login", req.url);
@@ -126,8 +134,9 @@ export function middleware(req: NextRequest) {
     try {
       verifyAccessToken(accessToken);
       return response;
-    } catch {
+    } catch (error) {
       // Token expired - redirect to login with hint to refresh
+      console.log('Middleware - Token verification failed:', error);
       const loginUrl = new URL("/login", req.url);
       loginUrl.searchParams.set("redirect", pathname);
       loginUrl.searchParams.set("expired", "true");
