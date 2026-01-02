@@ -19,7 +19,7 @@ export async function POST(req: Request) {
         'Validation failed',
         'VALIDATION_ERROR',
         400,
-        result.errors.format()
+        'errors' in result ? result.errors.format() : undefined
       );
     }
 

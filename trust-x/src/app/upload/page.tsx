@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 export default function UploadPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -113,9 +113,9 @@ export default function UploadPage() {
   };
 
   // Fetch files on component mount
-  useState(() => {
+  useEffect(() => {
     fetchFiles();
-  });
+  }, []);
 
   return (
     <div className="max-w-4xl mx-auto p-6">

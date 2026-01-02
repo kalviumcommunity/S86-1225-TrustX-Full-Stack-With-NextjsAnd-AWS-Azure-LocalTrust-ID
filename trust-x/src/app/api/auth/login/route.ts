@@ -45,7 +45,7 @@ export async function POST(req: Request) {
     response.cookies.set('refreshToken', refreshToken, {
       httpOnly: true, // Prevents JavaScript access (XSS protection)
       secure: process.env.NODE_ENV === 'production', // HTTPS only in production
-      sameSite: 'strict', // CSRF protection
+      sameSite: 'lax', // CSRF protection (lax is more permissive for redirects)
       maxAge: 7 * 24 * 60 * 60, // 7 days in seconds
       path: '/', // Available across all routes
     });
@@ -54,9 +54,16 @@ export async function POST(req: Request) {
     response.cookies.set('accessToken', accessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: 'lax', // Use 'lax' instead of 'strict' for better compatibility
       maxAge: 15 * 60, // 15 minutes in seconds
       path: '/',
+    });
+
+    console.log('Login - Cookies set:', {
+      refreshToken: 'Set',
+      accessToken: 'Set',
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax'
     });
 
     return response;

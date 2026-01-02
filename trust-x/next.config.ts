@@ -7,6 +7,9 @@ const nextConfig: NextConfig = {
     root: __dirname,
   },
   
+  // Enable standalone output for Docker deployment
+  output: 'standalone',
+  
   /**
    * Security Headers Configuration
    * Implements OWASP recommended security headers for HTTPS enforcement and attack prevention

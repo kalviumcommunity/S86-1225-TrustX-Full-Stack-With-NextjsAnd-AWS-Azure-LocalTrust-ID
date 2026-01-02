@@ -8,4 +8,9 @@ export const logger = {
   warn: (message: string, meta?: unknown) => {
     console.warn(JSON.stringify({ level: "warn", message, meta, timestamp: new Date() }));
   },
+  debug: (message: string, meta?: unknown) => {
+    if (process.env.NODE_ENV === 'development') {
+      console.log(JSON.stringify({ level: "debug", message, meta, timestamp: new Date() }));
+    }
+  },
 };

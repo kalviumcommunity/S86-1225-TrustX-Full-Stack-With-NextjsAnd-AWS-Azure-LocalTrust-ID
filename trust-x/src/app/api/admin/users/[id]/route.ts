@@ -10,7 +10,7 @@ import { prisma } from '@/lib/prisma';
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   // Require ADMIN role
   const context = requireRole(req, 'ADMIN', 'users');
@@ -21,10 +21,11 @@ export async function DELETE(
   }
 
   try {
-    const userId = parseInt(params.id);
+    const { id } = await params;
+    const userId = parseInt(id);
 
     if (isNaN(userId)) {
-      return sendError('Invalid user ID', 400, 'VALIDATION_ERROR');
+      return sendError('Invalid user ID', 'VALIDATION_ERROR', 400);
     }
 
     // Check if user exists
@@ -33,12 +34,12 @@ export async function DELETE(
     });
 
     if (!user) {
-      return sendError('User not found', 404, 'NOT_FOUND');
+      return sendError('User not found', 'NOT_FOUND', 404);
     }
 
     // Prevent self-deletion
     if (user.id === context.userId) {
-      return sendError('Cannot delete your own account', 400, 'INVALID_OPERATION');
+      return sendError('Cannot delete your own account', 'INVALID_OPERATION', 400);
     }
 
     // Delete user
@@ -53,6 +54,6 @@ export async function DELETE(
     );
   } catch (error) {
     console.error('Error deleting user:', error);
-    return sendError('Failed to delete user', 500, 'INTERNAL_ERROR');
+    return sendError('Failed to delete user', 'INTERNAL_ERROR', 500);
   }
 }

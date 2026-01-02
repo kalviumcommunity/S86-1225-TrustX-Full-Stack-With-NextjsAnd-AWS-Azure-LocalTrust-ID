@@ -72,7 +72,7 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to fetch projects';
     console.error('GET /api/projects error:', error);
-    return sendError(message, 500, 'INTERNAL_ERROR');
+    return sendError(message, 'INTERNAL_ERROR', 500);
   }
 }
 
@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
 
     // Validate required fields
     if (!title) {
-      return sendError('Title is required', 400, 'VALIDATION_ERROR');
+      return sendError('Title is required', 'VALIDATION_ERROR', 400);
     }
 
     // Use the authenticated user's ID
@@ -101,8 +101,8 @@ export async function POST(req: NextRequest) {
     if (projectUserId !== context.userId && context.role !== 'ADMIN') {
       return sendError(
         'Access denied: you can only create projects for yourself',
-        403,
-        'FORBIDDEN'
+        'FORBIDDEN',
+        403
       );
     }
 
@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
       });
 
       if (!user) {
-        return sendError('User not found', 404, 'NOT_FOUND');
+        return sendError('User not found', 'NOT_FOUND', 404);
       }
     }
 
@@ -137,6 +137,6 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to create project';
     console.error('POST /api/projects error:', error);
-    return sendError(message, 500, 'INTERNAL_ERROR');
+    return sendError(message, 'INTERNAL_ERROR', 500);
   }
 }
