@@ -1,16 +1,231 @@
-export const logger = {
-  info: (message: string, meta?: unknown) => {
-    console.log(JSON.stringify({ level: "info", message, meta, timestamp: new Date() }));
-  },
-  error: (message: string, meta?: unknown) => {
-    console.error(JSON.stringify({ level: "error", message, meta, timestamp: new Date() }));
-  },
-  warn: (message: string, meta?: unknown) => {
-    console.warn(JSON.stringify({ level: "warn", message, meta, timestamp: new Date() }));
-  },
-  debug: (message: string, meta?: unknown) => {
-    if (process.env.NODE_ENV === 'development') {
-      console.log(JSON.stringify({ level: "debug", message, meta, timestamp: new Date() }));
+/**
+ * Structured Logging Utility
+ * Provides JSON-formatted logs with correlation IDs for AWS CloudWatch/Azure Monitor
+ * 
+ * Features:
+ * - Request correlation tracking
+ * - Performance metrics
+ * - Error tracking with stack traces
+ * - Structured JSON output for cloud log aggregation
+ */
+
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+export interface LogContext {
+  requestId?: string;
+  userId?: string;
+  endpoint?: string;
+  method?: string;
+  statusCode?: number;
+  duration?: number;
+  [key: string]: unknown;
+}
+
+export interface LogEntry {
+  timestamp: string;
+  level: LogLevel;
+  message: string;
+  requestId?: string;
+  context?: LogContext;
+  error?: {
+    message: string;
+    stack?: string;
+    code?: string;
+  };
+  performance?: {
+    duration: number;
+    endpoint: string;
+    method: string;
+  };
+}
+
+class Logger {
+  private serviceName: string = 'trustx-app';
+  private environment: string = process.env.NODE_ENV || 'development';
+
+  /**
+   * Generate a unique request ID for correlation
+   */
+  generateRequestId(): string {
+    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  /**
+   * Core logging method - outputs structured JSON
+   */
+  private log(level: LogLevel, message: string, context?: LogContext, error?: Error): void {
+    const entry: LogEntry = {
+      timestamp: new Date().toISOString(),
+      level,
+      message,
+      requestId: context?.requestId,
+      context: {
+        ...context,
+        service: this.serviceName,
+        environment: this.environment,
+      },
+    };
+
+    // Add error details if present
+    if (error) {
+      entry.error = {
+        message: error.message,
+        stack: error.stack,
+        code: (error as any).code,
+      };
     }
+
+    // Output to appropriate console method
+    const output = JSON.stringify(entry);
+    switch (level) {
+      case 'error':
+        console.error(output);
+        break;
+      case 'warn':
+        console.warn(output);
+        break;
+      case 'debug':
+        if (this.environment === 'development') {
+          console.log(output);
+        }
+        break;
+      default:
+        console.log(output);
+    }
+  }
+
+  /**
+   * Log informational messages
+   */
+  info(message: string, context?: LogContext): void {
+    this.log('info', message, context);
+  }
+
+  /**
+   * Log warning messages
+   */
+  warn(message: string, context?: LogContext): void {
+    this.log('warn', message, context);
+  }
+
+  /**
+   * Log error messages with optional Error object
+   */
+  error(message: string, context?: LogContext, error?: Error): void {
+    this.log('error', message, context, error);
+  }
+
+  /**
+   * Log debug messages (only in development)
+   */
+  debug(message: string, context?: LogContext): void {
+    this.log('debug', message, context);
+  }
+
+  /**
+   * Log API request start
+   */
+  logRequest(requestId: string, method: string, endpoint: string, userId?: string): void {
+    this.info('API request received', {
+      requestId,
+      method,
+      endpoint,
+      userId,
+    });
+  }
+
+  /**
+   * Log API request completion with performance metrics
+   */
+  logResponse(
+    requestId: string,
+    method: string,
+    endpoint: string,
+    statusCode: number,
+    duration: number,
+    userId?: string
+  ): void {
+    const level = statusCode >= 500 ? 'error' : statusCode >= 400 ? 'warn' : 'info';
+    
+    this.log(level, 'API request completed', {
+      requestId,
+      method,
+      endpoint,
+      statusCode,
+      duration,
+      userId,
+    });
+  }
+
+  /**
+   * Log database operations
+   */
+  logDatabase(operation: string, table: string, duration: number, requestId?: string): void {
+    this.debug('Database operation', {
+      requestId,
+      operation,
+      table,
+      duration,
+    });
+  }
+
+  /**
+   * Log cache operations
+   */
+  logCache(operation: 'hit' | 'miss' | 'set', key: string, requestId?: string): void {
+    this.debug(`Cache ${operation}`, {
+      requestId,
+      cacheKey: key,
+    });
+  }
+
+  /**
+   * Log authentication events
+   */
+  logAuth(event: string, userId?: string, success: boolean = true, requestId?: string): void {
+    this.info(`Authentication: ${event}`, {
+      requestId,
+      userId,
+      success,
+      authEvent: event,
+    });
+  }
+
+  /**
+   * Log security events
+   */
+  logSecurity(event: string, severity: 'low' | 'medium' | 'high', context?: LogContext): void {
+    this.warn(`Security event: ${event}`, {
+      ...context,
+      severity,
+      securityEvent: event,
+    });
+  }
+}
+
+// Export singleton instance
+export const logger = new Logger();
+
+/**
+ * Performance tracking utility
+ * Usage:
+ *   const timer = performance.start('operation-name');
+ *   // ... do work
+ *   timer.end();
+ */
+export const performance = {
+  start(operation: string, requestId?: string) {
+    const startTime = Date.now();
+    return {
+      end() {
+        const duration = Date.now() - startTime;
+        logger.debug(`Performance: ${operation}`, {
+          requestId,
+          operation,
+          duration,
+        });
+        return duration;
+      },
+    };
   },
 };

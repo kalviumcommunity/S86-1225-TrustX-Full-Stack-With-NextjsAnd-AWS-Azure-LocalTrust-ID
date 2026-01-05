@@ -1,0 +1,153 @@
+/**
+ * Azure Monitor Kusto Queries Reference
+ * Sample queries for Azure Log Analytics
+ */
+
+// 1. All errors in the last hour
+AppServiceConsoleLogs
+| where TimeGenerated > ago(1h)
+| where Level == "Error"
+| extend RequestId = tostring(parse_json(Message).context.requestId)
+| extend Endpoint = tostring(parse_json(Message).context.endpoint)
+| project TimeGenerated, Message, RequestId, Endpoint
+| order by TimeGenerated desc
+| limit 100
+
+// 2. Errors grouped by endpoint
+AppServiceConsoleLogs
+| where TimeGenerated > ago(24h)
+| where Level == "Error"
+| extend Endpoint = tostring(parse_json(Message).context.endpoint)
+| where isnotempty(Endpoint)
+| summarize ErrorCount = count() by Endpoint
+| order by ErrorCount desc
+
+// 3. Slow API requests (>1 second)
+AppServiceHTTPLogs
+| where TimeGenerated > ago(1h)
+| where TimeTaken > 1000
+| project TimeGenerated, CsUriStem, CsMethod, TimeTaken, ScStatus
+| order by TimeTaken desc
+| limit 50
+
+// 4. Average response time by endpoint
+AppServiceHTTPLogs
+| where TimeGenerated > ago(24h)
+| summarize 
+    AvgDuration = avg(TimeTaken),
+    MaxDuration = max(TimeTaken),
+    RequestCount = count()
+    by CsUriStem
+| order by AvgDuration desc
+
+// 5. Failed login attempts
+AppServiceConsoleLogs
+| where TimeGenerated > ago(1h)
+| where Message contains "login_failed"
+| extend Email = tostring(parse_json(Message).context.email)
+| extend UserId = tostring(parse_json(Message).context.userId)
+| project TimeGenerated, Email, UserId
+| order by TimeGenerated desc
+
+// 6. Request rate per endpoint (requests per minute)
+AppServiceHTTPLogs
+| where TimeGenerated > ago(1h)
+| summarize RequestCount = count() by bin(TimeGenerated, 1m), CsUriStem
+| order by TimeGenerated desc
+
+// 7. HTTP status code distribution
+AppServiceHTTPLogs
+| where TimeGenerated > ago(24h)
+| summarize Count = count() by ScStatus
+| order by ScStatus asc
+
+// 8. Error rate trend (5-minute intervals)
+AppServiceConsoleLogs
+| where TimeGenerated > ago(24h)
+| where Level == "Error"
+| summarize ErrorCount = count() by bin(TimeGenerated, 5m)
+| render timechart
+
+// 9. User activity (authenticated requests)
+AppServiceConsoleLogs
+| where TimeGenerated > ago(1h)
+| extend UserId = tostring(parse_json(Message).context.userId)
+| extend Endpoint = tostring(parse_json(Message).context.endpoint)
+| where isnotempty(UserId)
+| project TimeGenerated, UserId, Endpoint
+| order by TimeGenerated desc
+
+// 10. Performance percentiles
+AppServiceHTTPLogs
+| where TimeGenerated > ago(24h)
+| summarize 
+    P50 = percentile(TimeTaken, 50),
+    P90 = percentile(TimeTaken, 90),
+    P95 = percentile(TimeTaken, 95),
+    P99 = percentile(TimeTaken, 99)
+    by CsUriStem
+| order by P99 desc
+
+// 11. Security events
+AppServiceConsoleLogs
+| where TimeGenerated > ago(24h)
+| where Message contains "securityEvent"
+| extend Severity = tostring(parse_json(Message).context.severity)
+| extend Event = tostring(parse_json(Message).context.securityEvent)
+| project TimeGenerated, Event, Severity, Message
+| order by TimeGenerated desc
+
+// 12. Most active users
+AppServiceConsoleLogs
+| where TimeGenerated > ago(24h)
+| extend UserId = tostring(parse_json(Message).context.userId)
+| where isnotempty(UserId)
+| summarize RequestCount = count() by UserId
+| order by RequestCount desc
+| limit 20
+
+// 13. Error details with stack traces
+AppServiceConsoleLogs
+| where TimeGenerated > ago(1h)
+| where Level == "Error"
+| extend ErrorMessage = tostring(parse_json(Message).error.message)
+| extend Stack = tostring(parse_json(Message).error.stack)
+| project TimeGenerated, ErrorMessage, Stack
+| order by TimeGenerated desc
+
+// 14. Request correlation (find all logs for a specific request)
+AppServiceConsoleLogs
+| where TimeGenerated > ago(1h)
+| extend RequestId = tostring(parse_json(Message).requestId)
+| where RequestId == "YOUR_REQUEST_ID_HERE"
+| project TimeGenerated, Level, Message
+| order by TimeGenerated asc
+
+// 15. Cache performance
+AppServiceConsoleLogs
+| where TimeGenerated > ago(1h)
+| where Message contains "Cache"
+| extend CacheKey = tostring(parse_json(Message).context.cacheKey)
+| summarize Count = count() by Message
+| order by Count desc
+
+// 16. Authentication success vs failure rate
+AppServiceConsoleLogs
+| where TimeGenerated > ago(24h)
+| where Message contains "Authentication"
+| extend Success = tostring(parse_json(Message).context.success)
+| summarize Count = count() by Success, bin(TimeGenerated, 1h)
+| render timechart
+
+// 17. Application exceptions
+AppExceptions
+| where TimeGenerated > ago(24h)
+| summarize ExceptionCount = count() by Type
+| order by ExceptionCount desc
+
+// 18. Resource utilization
+AppPerformanceCounters
+| where TimeGenerated > ago(1h)
+| where Name == "% Processor Time" or Name == "Available MBytes"
+| summarize avg(Value) by Name, bin(TimeGenerated, 5m)
+| render timechart

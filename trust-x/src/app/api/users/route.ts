@@ -10,14 +10,19 @@ import { prisma } from '@/lib/prisma';
 import { cacheService } from '@/lib/cache';
 import { requireResourcePermission } from '@/lib/rbac';
 import { sendSuccess, sendError } from '@/lib/responseHandler';
+import { logger, performance as perfLogger } from '@/lib/logger';
+import { createRequestContext, logRequestCompletion } from '@/lib/requestLogger';
 
 // GET: Retrieve all users with pagination and filtering
 export async function GET(req: NextRequest) {
-  // Require 'read' permission on 'users' resource
-  const context = requireResourcePermission(req, 'users', 'read');
+  const context = createRequestContext(req);
   
-  if (context instanceof Response) {
-    return context;
+  // Require 'read' permission on 'users' resource
+  const rbacCheck = requireResourcePermission(req, 'users', 'read');
+  
+  if (rbacCheck instanceof Response) {
+    logRequestCompletion(context, req, rbacCheck.status);
+    return rbacCheck;
   }
 
   try {
@@ -33,11 +38,12 @@ export async function GET(req: NextRequest) {
     // Try to get data from cache first
     const cachedData = await cacheService.get(cacheKey);
     if (cachedData) {
-      console.log("Cache Hit - Users list");
+      logger.logCache('hit', cacheKey, context.requestId);
+      logRequestCompletion(context, req, 200);
       return NextResponse.json(cachedData);
     }
 
-    console.log("Cache Miss - Fetching users from DB");
+    logger.logCache('miss', cacheKey, context.requestId);
 
     // Calculate skip for pagination
     const skip = (page - 1) * limit;
@@ -52,6 +58,9 @@ export async function GET(req: NextRequest) {
         }
       : {};
 
+    // Track database query performance
+    const dbTimer = perfLogger.start('users-query', context.requestId);
+    
     // Fetch users and total count
     const [users, total] = await Promise.all([
       prisma.user.findMany({
@@ -69,6 +78,10 @@ export async function GET(req: NextRequest) {
       }),
       prisma.user.count({ where: whereClause }),
     ]);
+    
+    const dbDuration = dbTimer.end();
+    
+    logger.logDatabase('findMany', 'user', dbDuration, context.requestId);
 
     const responseData = {
       success: true,
@@ -84,12 +97,31 @@ export async function GET(req: NextRequest) {
     // Cache the response for 60 seconds (TTL)
     await cacheService.set(cacheKey, responseData, 60);
 
+    logger.info('Users list fetched successfully', {
+      requestId: context.requestId,
+      resultCount: users.length,
+      page,
+      search: search || 'none',
+    });
+
+    logRequestCompletion(context, req, 200);
     return NextResponse.json(responseData, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to fetch users';
-    console.error('GET /api/users error:', error);
+    
+    logger.error('Failed to fetch users', {
+      requestId: context.requestId,
+      endpoint: '/api/users',
+    }, error as Error);
+    
+    logRequestCompletion(context, req, 500);
+    
     return NextResponse.json(
-      { success: false, error: message },
+      { 
+        success: false, 
+        error: message,
+        requestId: context.requestId,
+      },
       { status: 500 }
     );
   }
