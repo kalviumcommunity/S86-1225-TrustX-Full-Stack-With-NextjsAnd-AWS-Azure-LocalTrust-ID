@@ -11,7 +11,7 @@ This project uses **GitHub Actions** for automated Continuous Integration and De
 ### Pipeline Stages
 
 ```
-📥 Checkout → 🔧 Setup → 📦 Install → 🔍 Lint → 🧪 Test → 🏗️ Build → 🚀 Deploy
+📥 Checkout → 🔧 Setup → 📦 Install → 🔍 Lint → 🧪 Test → 🏗️ Build → � Docker → 🚀 Deploy
 ```
 
 **Workflow File:** `.github/workflows/ci.yml`
@@ -23,6 +23,7 @@ This project uses **GitHub Actions** for automated Continuous Integration and De
 | 🔍 **Lint** | Code quality checks | `npm run lint` |
 | 🧪 **Test** | Unit & integration tests | `npm run test:ci` |
 | 🏗️ **Build** | Production build | `npm run build` |
+| 🐳 **Docker** | Build & push container | Multi-registry push |
 | 🚀 **Deploy** | Deploy to AWS/Azure | Conditional on branch |
 
 ### Triggers
@@ -43,6 +44,9 @@ This project uses **GitHub Actions** for automated Continuous Integration and De
 - ⚡ **Concurrency control** - Auto-cancels outdated runs
 - 🔄 **Parallel jobs** - Security scans run independently
 - 📊 **Coverage upload** - Automatic Codecov integration
+- 🐳 **Docker layer caching** - 70% faster image builds
+- 🏗️ **Multi-platform builds** - linux/amd64 & linux/arm64
+- 📦 **Multi-registry push** - Docker Hub + GitHub Registry
 
 ### View Results
 
@@ -51,8 +55,11 @@ Go to **[Actions Tab](https://github.com/YOUR_USERNAME/trust-x/actions)** to see
 - 📊 Coverage reports
 - 🐛 Failed checks with detailed logs
 - ⏱️ Performance metrics
+- 🐳 Docker image tags and digests
 
-**📖 Full Documentation:** See [CI-PIPELINE-DOCUMENTATION.md](CI-PIPELINE-DOCUMENTATION.md)
+**📖 Full Documentation:**
+- [CI-PIPELINE-DOCUMENTATION.md](CI-PIPELINE-DOCUMENTATION.md) - Complete CI/CD guide
+- [DOCKER-BUILD-PUSH-AUTOMATION.md](DOCKER-BUILD-PUSH-AUTOMATION.md) - Docker automation details
 
 ---
 
