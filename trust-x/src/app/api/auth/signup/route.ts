@@ -39,7 +39,7 @@ export async function POST(req: Request) {
     // Check if user exists
     const existingUser = await prisma.user.findUnique({ where: { email: sanitizedEmail } });
     if (existingUser) {
-      return sendError('User already exists', 'USER_EXISTS', 400);
+      return sendError('User already exists', 'USER_EXISTS', 409);
     }
 
     // Hash the password
@@ -70,7 +70,9 @@ export async function POST(req: Request) {
         logger.error(`Error sending welcome email to ${sanitizedEmail}`, { error: error.message });
       });
 
-    return sendSuccess({ user: newUser }, 'Signup successful', 201);
+    // Remove password from response
+    const { password: _, ...userWithoutPassword } = newUser;
+    return sendSuccess({ user: userWithoutPassword }, 'Signup successful', 201);
   } catch (error) {
     logger.error('Signup failed', { error });
     return sendError('Signup failed', 'INTERNAL_ERROR', 500);
