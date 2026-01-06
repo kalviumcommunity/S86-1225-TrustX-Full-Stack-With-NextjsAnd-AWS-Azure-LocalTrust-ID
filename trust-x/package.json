@@ -20,6 +20,7 @@
     "test:integration": "jest --config jest.integration.config.js",
     "test:integration:watch": "jest --config jest.integration.config.js --watch",
     "test:integration:coverage": "jest --config jest.integration.config.js --coverage",
+    "test:smoke": "jest --testPathPattern=__smoke_tests__ --runInBand --forceExit",
     "test:all": "npm test && npm run test:integration",
     "test:cache": "node cache-test.js",
     "test:db": "node scripts/test-db-connection.js",

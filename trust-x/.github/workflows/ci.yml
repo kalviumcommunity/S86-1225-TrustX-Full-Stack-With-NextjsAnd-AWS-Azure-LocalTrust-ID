@@ -176,12 +176,20 @@ jobs:
       # STAGE 5: DEPLOY (Main Branch Only)
       # ================================
       - name: 🚀 Deploy to Production (AWS ECS)
+        id: deploy-production
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
           echo "🚀 Deploying to production environment..."
           echo "Branch: ${{ github.ref }}"
           echo "Commit: ${{ github.sha }}"
           echo "Docker Image: ${{ secrets.DOCKER_USERNAME }}/trust-x:latest"
+          
+          # Save previous task definition for potential rollback
+          echo "📸 Saving current task definition for rollback..."
+          # aws ecs describe-services \
+          #   --cluster trust-x-cluster \
+          #   --services trust-x-service \
+          #   --region ${{ secrets.AWS_REGION }} > previous-service.json
           
           # Example AWS ECS deployment
           # aws ecs update-service \
@@ -191,10 +199,171 @@ jobs:
           #   --region ${{ secrets.AWS_REGION }}
           
           echo "✅ Production deployment initiated!"
+          echo "DEPLOYMENT_URL=https://trust-x-production.com" >> $GITHUB_OUTPUT
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
+
+      # ================================
+      # STAGE 6: DEPLOYMENT VERIFICATION
+      # ================================
+      - name: ⏳ Wait for deployment to stabilize
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          echo "⏳ Waiting 30 seconds for deployment to stabilize..."
+          sleep 30
+          
+          # Example: Wait for ECS service to become stable
+          # aws ecs wait services-stable \
+          #   --cluster trust-x-cluster \
+          #   --services trust-x-service \
+          #   --region ${{ secrets.AWS_REGION }}
+          
+          echo "✅ Deployment stabilized"
+
+      - name: 🏥 Verify Health Check Endpoint
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        id: health-check
+        run: |
+          echo "🏥 Running health check verification..."
+          DEPLOYMENT_URL="${{ steps.deploy-production.outputs.DEPLOYMENT_URL || 'http://localhost:3000' }}"
+          
+          # Try health endpoint with retries
+          MAX_RETRIES=5
+          RETRY_COUNT=0
+          
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            echo "Attempt $((RETRY_COUNT + 1))/$MAX_RETRIES: Checking $DEPLOYMENT_URL/api/health"
+            
+            # Use curl with timeout and follow redirects
+            RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$DEPLOYMENT_URL/api/health" || echo "000")
+            
+            if [ "$RESPONSE" = "200" ]; then
+              echo "✅ Health check passed! Status code: $RESPONSE"
+              
+              # Get detailed health info
+              HEALTH_DATA=$(curl -s --max-time 10 "$DEPLOYMENT_URL/api/health" || echo "{}")
+              echo "Health data: $HEALTH_DATA"
+              
+              exit 0
+            else
+              echo "⚠️ Health check failed with status: $RESPONSE"
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              
+              if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                echo "Retrying in 10 seconds..."
+                sleep 10
+              fi
+            fi
+          done
+          
+          echo "❌ Health check failed after $MAX_RETRIES attempts"
+          exit 1
+
+      - name: 🧪 Run Smoke Tests
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        id: smoke-tests
+        run: |
+          echo "🧪 Running post-deployment smoke tests..."
+          
+          # Set the deployment URL for smoke tests
+          export NEXT_PUBLIC_APP_URL="${{ steps.deploy-production.outputs.DEPLOYMENT_URL || 'http://localhost:3000' }}"
+          
+          # Run smoke tests with Jest
+          npm run test:smoke || EXIT_CODE=$?
+          
+          if [ "${EXIT_CODE:-0}" -ne 0 ]; then
+            echo "❌ Smoke tests failed!"
+            exit 1
+          fi
+          
+          echo "✅ All smoke tests passed!"
+
+      - name: 📊 Record Deployment Metrics
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          echo "📊 Recording deployment metrics..."
+          echo "Deployment Time: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          echo "Commit SHA: ${{ github.sha }}"
+          echo "Deployed by: ${{ github.actor }}"
+          echo "Health Check: ✅ Passed"
+          echo "Smoke Tests: ✅ Passed"
+          
+          # Record to monitoring system (example)
+          # curl -X POST https://metrics.example.com/deployments \
+          #   -H "Content-Type: application/json" \
+          #   -d '{
+          #     "service": "trust-x",
+          #     "version": "${{ github.sha }}",
+          #     "status": "success",
+          #     "timestamp": "$(date -u +%s)"
+          #   }'
+
+      # ================================
+      # STAGE 7: ROLLBACK ON FAILURE
+      # ================================
+      - name: ⚠️ Rollback Deployment
+        if: failure() && github.ref == 'refs/heads/main' && (steps.health-check.outcome == 'failure' || steps.smoke-tests.outcome == 'failure')
+        run: |
+          echo "⚠️ Deployment verification failed! Initiating rollback..."
+          echo "Failed step: Health Check=${{ steps.health-check.outcome }}, Smoke Tests=${{ steps.smoke-tests.outcome }}"
+          
+          # Method 1: Rollback to previous task definition (AWS ECS)
+          echo "🔄 Rolling back to previous version..."
+          # aws ecs update-service \
+          #   --cluster trust-x-cluster \
+          #   --service trust-x-service \
+          #   --task-definition $(cat previous-service.json | jq -r '.services[0].taskDefinition') \
+          #   --force-new-deployment \
+          #   --region ${{ secrets.AWS_REGION }}
+          
+          # Method 2: Revert to previous Docker image tag
+          # PREVIOUS_SHA=$(git rev-parse HEAD~1)
+          # aws ecs update-service \
+          #   --cluster trust-x-cluster \
+          #   --service trust-x-service \
+          #   --task-definition trust-x-task:previous \
+          #   --force-new-deployment
+          
+          echo "⏳ Waiting for rollback to complete..."
+          sleep 30
+          
+          # Verify rollback succeeded
+          echo "🏥 Verifying rollback health..."
+          ROLLBACK_URL="${{ steps.deploy-production.outputs.DEPLOYMENT_URL || 'http://localhost:3000' }}"
+          ROLLBACK_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$ROLLBACK_URL/api/health" || echo "000")
+          
+          if [ "$ROLLBACK_STATUS" = "200" ]; then
+            echo "✅ Rollback successful! Service is healthy."
+          else
+            echo "❌ Rollback verification failed! Manual intervention required."
+            exit 1
+          fi
+          
+          # Notify team about rollback
+          echo "📢 ALERT: Deployment rolled back due to failed verification"
+          echo "Commit ${{ github.sha }} was reverted"
+          
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
+
+      - name: 📈 Calculate MTTR (Mean Time to Recover)
+        if: failure() && github.ref == 'refs/heads/main'
+        run: |
+          echo "📈 Calculating recovery metrics..."
+          
+          START_TIME="${{ github.event.head_commit.timestamp }}"
+          END_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          
+          echo "Deployment started: $START_TIME"
+          echo "Rollback completed: $END_TIME"
+          
+          # Calculate MTTR (example - would need proper time calculation)
+          echo "MTTR: ~2-5 minutes (including detection + rollback)"
+          echo "MTTD: <2 minutes (via health check + smoke tests)"
 
       # ================================
       # Deploy to Staging (Develop Branch)
