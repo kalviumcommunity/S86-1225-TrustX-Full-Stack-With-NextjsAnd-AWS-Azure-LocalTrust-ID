@@ -1,0 +1,237 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: 
+      - main
+      - develop
+      - Integration-Testing
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch: # Manual trigger
+
+# Prevent overlapping runs on the same branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test-deploy:
+    name: Lint, Test, Build & Deploy
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [18.x]
+    
+    steps:
+      # ================================
+      # STEP 1: Checkout Repository
+      # ================================
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetch all history for better analysis
+
+      # ================================
+      # STEP 2: Set up Node.js
+      # ================================
+      - name: 🔧 Set up Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm' # Cache npm dependencies for faster installs
+
+      # ================================
+      # STEP 3: Install Dependencies
+      # ================================
+      - name: 📦 Install dependencies
+        run: npm ci --prefer-offline --no-audit
+        env:
+          NODE_ENV: development
+
+      # ================================
+      # STAGE 1: LINT
+      # ================================
+      - name: 🔍 Run ESLint
+        run: npm run lint
+        continue-on-error: false
+
+      - name: 🎨 Check code formatting
+        run: npm run format:check
+        continue-on-error: false
+
+      # ================================
+      # STAGE 2: TEST
+      # ================================
+      - name: 🧪 Run Unit Tests
+        run: npm run test:ci
+        env:
+          NODE_ENV: test
+          DATABASE_URL: file:./test.db
+          JWT_SECRET: test-jwt-secret-key-for-ci
+          JWT_REFRESH_SECRET: test-jwt-refresh-secret-key-for-ci
+          REDIS_URL: redis://localhost:6379/1
+
+      - name: 🔬 Run Integration Tests
+        run: npm run test:integration
+        env:
+          NODE_ENV: test
+          DATABASE_URL: file:./test.db
+          JWT_SECRET: test-jwt-secret-key-for-ci
+          JWT_REFRESH_SECRET: test-jwt-refresh-secret-key-for-ci
+          REDIS_URL: redis://localhost:6379/1
+        continue-on-error: true # Don't fail CI if integration tests fail
+
+      # ================================
+      # Upload Test Coverage
+      # ================================
+      - name: 📊 Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/lcov.info
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+        continue-on-error: true
+
+      # ================================
+      # STAGE 3: BUILD
+      # ================================
+      - name: 🏗️ Build Next.js application
+        run: npm run build
+        env:
+          NODE_ENV: production
+          DATABASE_URL: ${{ secrets.DATABASE_URL || 'file:./dev.db' }}
+          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL || 'http://localhost:3000' }}
+
+      # ================================
+      # Verify Build Output
+      # ================================
+      - name: ✅ Verify build artifacts
+        run: |
+          echo "Checking build output..."
+          ls -la .next/
+          echo "Build verification complete!"
+
+      # ================================
+      # STAGE 4: DEPLOY (Main Branch Only)
+      # ================================
+      - name: 🚀 Deploy to Production
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          echo "🚀 Deploying to production environment..."
+          echo "Branch: ${{ github.ref }}"
+          echo "Commit: ${{ github.sha }}"
+          # Add your deployment script here:
+          # Example for AWS: aws deploy push
+          # Example for Azure: az webapp deploy
+          # Example for Vercel: vercel deploy --prod
+          echo "✅ Deployment preparation complete!"
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
+
+      # ================================
+      # Deploy to Staging (Develop Branch)
+      # ================================
+      - name: 🎯 Deploy to Staging
+        if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+        run: |
+          echo "🎯 Deploying to staging environment..."
+          echo "Branch: ${{ github.ref }}"
+          echo "Commit: ${{ github.sha }}"
+          # Add staging deployment script here
+          echo "✅ Staging deployment preparation complete!"
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
+
+      # ================================
+      # Notification (Optional)
+      # ================================
+      - name: 📢 Notify success
+        if: success()
+        run: |
+          echo "✅ CI Pipeline completed successfully!"
+          echo "All checks passed for commit ${{ github.sha }}"
+
+      - name: 📢 Notify failure
+        if: failure()
+        run: |
+          echo "❌ CI Pipeline failed!"
+          echo "Please check the logs for details."
+
+  # ================================
+  # Optional: Security Scanning
+  # ================================
+  security-scan:
+    name: 🔒 Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🔍 Run npm audit
+        run: npm audit --production
+        continue-on-error: true
+
+      - name: 🔒 Run Snyk Security Scan
+        uses: snyk/actions/node@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high
+
+  # ================================
+  # Optional: Performance Check
+  # ================================
+  lighthouse:
+    name: 🚦 Lighthouse Performance Audit
+    runs-on: ubuntu-latest
+    needs: build-test-deploy
+    if: github.event_name == 'pull_request'
+    
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🔧 Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci --prefer-offline
+
+      - name: 🏗️ Build application
+        run: npm run build
+        env:
+          DATABASE_URL: file:./dev.db
+
+      - name: 🚀 Start server
+        run: npm start &
+        env:
+          PORT: 3000
+          DATABASE_URL: file:./dev.db
+
+      - name: ⏳ Wait for server
+        run: npx wait-on http://localhost:3000 --timeout 60000
+
+      - name: 🚦 Run Lighthouse CI
+        uses: treosh/lighthouse-ci-action@v10
+        with:
+          urls: |
+            http://localhost:3000
+          uploadArtifacts: true
+          temporaryPublicStorage: true
+        continue-on-error: true
