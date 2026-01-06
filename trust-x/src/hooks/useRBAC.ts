@@ -22,6 +22,8 @@ interface UserRBAC {
   hasPermission: (permission: Permission) => boolean;
   hasResourcePermission: (resource: string, permission: Permission) => boolean;
   isRoleAtLeast: (requiredRole: Role) => boolean;
+  hasAnyPermission: (permissions: Permission[]) => boolean;
+  hasAllPermissions: (permissions: Permission[]) => boolean;
   canCreate: boolean;
   canRead: boolean;
   canUpdate: boolean;
@@ -78,11 +80,23 @@ export function useRBAC(): UserRBAC {
     return isRoleAtLeast(role, requiredRole);
   };
 
+  const hasAnyPermissions = (permissions: Permission[]): boolean => {
+    if (!role) return false;
+    return permissions.some(permission => hasPermission(role, permission));
+  };
+
+  const hasAllPermissionsCheck = (permissions: Permission[]): boolean => {
+    if (!role) return false;
+    return permissions.every(permission => hasPermission(role, permission));
+  };
+
   return {
     role,
     hasPermission: checkPermission,
     hasResourcePermission: checkResourcePermission,
     isRoleAtLeast: checkRoleAtLeast,
+    hasAnyPermission: hasAnyPermissions,
+    hasAllPermissions: hasAllPermissionsCheck,
     
     // Convenience properties for common permissions
     canCreate: checkPermission('create'),
