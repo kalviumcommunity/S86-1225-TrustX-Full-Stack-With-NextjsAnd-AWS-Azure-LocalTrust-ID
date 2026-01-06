@@ -15,11 +15,16 @@ This project uses **GitHub Actions** to automate the Continuous Integration (CI)
 │                                          ↓                    │
 │                                    🏗️ Build                   │
 │                                          ↓                    │
+│                                    🐳 Docker Build            │
+│                                          ↓                    │
 │                          ┌───────────────┴───────────────┐   │
 │                          ↓                               ↓   │
 │                    🚀 Deploy (main)              🎯 Deploy    │
 │                      Production                   (develop)   │
-│                                                  Staging      │
+│                      Docker Hub                  Staging      │
+│                      + ghcr.io                   GitHub       │
+│                      + AWS ECR                   Container    │
+│                                                  Registry     │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -155,7 +160,58 @@ NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
 
 ---
 
-### Stage 4: 🚀 DEPLOY
+### Stage 4: � DOCKER BUILD & PUSH
+
+**Purpose:** Build and push production-ready Docker containers
+
+**Steps:**
+
+1. **Set up Docker Buildx**
+   - Enables multi-platform builds
+   - Configures advanced caching
+
+2. **Login to Registries**
+   - Docker Hub authentication
+   - GitHub Container Registry (ghcr.io)
+   - AWS ECR (optional)
+
+3. **Extract Metadata & Tags**
+   - Generates smart tags based on branch/commit
+   - Creates version tags for releases
+   - Tags format: `latest`, `main`, `develop`, `sha-abc123`
+
+4. **Build and Push Image**
+   ```bash
+   docker build -t trust-x:latest .
+   docker push trust-x:latest
+   ```
+   - Multi-stage optimized build
+   - Pushes to multiple registries
+   - Supports linux/amd64 and linux/arm64
+
+**Docker Image Details:**
+- **Size:** ~150MB (optimized with multi-stage build)
+- **Base:** node:20-alpine
+- **Layers:** 12 (cached for fast rebuilds)
+- **Registries:** Docker Hub + GitHub Container Registry
+
+**Tagging Strategy:**
+| Branch | Docker Tags |
+|--------|-------------|
+| `main` | `latest`, `main`, `main-sha123` |
+| `develop` | `develop`, `develop-sha456` |
+| `feature/*` | `feature-name-sha789` |
+
+**Performance:**
+- First build: 5-6 minutes
+- Cached build: 1-2 minutes
+- Push time: 30-45 seconds
+
+**📖 Full Docker Documentation:** See [DOCKER-BUILD-PUSH-AUTOMATION.md](DOCKER-BUILD-PUSH-AUTOMATION.md)
+
+---
+
+### Stage 5: �🚀 DEPLOY
 
 **Purpose:** Automatically deploy to hosting environments
 

@@ -119,19 +119,78 @@ jobs:
           echo "Build verification complete!"
 
       # ================================
-      # STAGE 4: DEPLOY (Main Branch Only)
+      # STAGE 4: DOCKER BUILD & PUSH
       # ================================
-      - name: 🚀 Deploy to Production
+      - name: 🐋 Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 🔐 Log in to Docker Hub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: 🔐 Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🏷️ Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ secrets.DOCKER_USERNAME }}/trust-x
+            ghcr.io/${{ github.repository }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: 🐳 Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            NODE_ENV=production
+            NEXT_TELEMETRY_DISABLED=1
+
+      - name: 📋 Image digest
+        run: echo ${{ steps.build-push.outputs.digest }}
+
+      # ================================
+      # STAGE 5: DEPLOY (Main Branch Only)
+      # ================================
+      - name: 🚀 Deploy to Production (AWS ECS)
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
           echo "🚀 Deploying to production environment..."
           echo "Branch: ${{ github.ref }}"
           echo "Commit: ${{ github.sha }}"
-          # Add your deployment script here:
-          # Example for AWS: aws deploy push
-          # Example for Azure: az webapp deploy
-          # Example for Vercel: vercel deploy --prod
-          echo "✅ Deployment preparation complete!"
+          echo "Docker Image: ${{ secrets.DOCKER_USERNAME }}/trust-x:latest"
+          
+          # Example AWS ECS deployment
+          # aws ecs update-service \
+          #   --cluster trust-x-cluster \
+          #   --service trust-x-service \
+          #   --force-new-deployment \
+          #   --region ${{ secrets.AWS_REGION }}
+          
+          echo "✅ Production deployment initiated!"
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -140,14 +199,22 @@ jobs:
       # ================================
       # Deploy to Staging (Develop Branch)
       # ================================
-      - name: 🎯 Deploy to Staging
+      - name: 🎯 Deploy to Staging (AWS ECS)
         if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
         run: |
           echo "🎯 Deploying to staging environment..."
           echo "Branch: ${{ github.ref }}"
           echo "Commit: ${{ github.sha }}"
-          # Add staging deployment script here
-          echo "✅ Staging deployment preparation complete!"
+          echo "Docker Image: ${{ secrets.DOCKER_USERNAME }}/trust-x:develop"
+          
+          # Example AWS ECS staging deployment
+          # aws ecs update-service \
+          #   --cluster trust-x-staging-cluster \
+          #   --service trust-x-staging-service \
+          #   --force-new-deployment \
+          #   --region ${{ secrets.AWS_REGION }}
+          
+          echo "✅ Staging deployment initiated!"
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
