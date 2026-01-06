@@ -92,12 +92,13 @@ export function RBACGuard({
     allowed = rbac.hasResourcePermission(resource, resourcePermission);
   }
   // Check any permissions (OR logic)
+  // Check any permissions (OR logic)
   else if (anyPermissions) {
-    allowed = anyPermissions.some((perm) => rbac.hasPermission(perm));
+    allowed = rbac.hasAnyPermission(anyPermissions);
   }
   // Check all permissions (AND logic)
   else if (allPermissions) {
-    allowed = allPermissions.every((perm) => rbac.hasPermission(perm));
+    allowed = rbac.hasAllPermissions(allPermissions);
   }
   // No conditions specified - show content
   else {

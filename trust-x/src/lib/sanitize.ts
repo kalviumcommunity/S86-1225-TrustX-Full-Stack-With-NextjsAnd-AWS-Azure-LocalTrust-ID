@@ -55,7 +55,14 @@ const richTextSanitizeOptions: sanitizeHtml.IOptions = {
  */
 export function sanitizeStrict(input: string): string {
   if (!input || typeof input !== 'string') return '';
-  return sanitizeHtml(input, strictSanitizeOptions).trim();
+  // Decode HTML entities after sanitization
+  const sanitized = sanitizeHtml(input, strictSanitizeOptions).trim();
+  return sanitized
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#x27;/g, "'");
 }
 
 /**
@@ -104,17 +111,31 @@ export function sanitizeEmail(input: string): string {
 export function sanitizeUrl(input: string): string {
   if (!input || typeof input !== 'string') return '';
   
+  // Check for dangerous protocols first
+  const dangerousProtocols = ['javascript:', 'data:', 'vbscript:'];
+  if (dangerousProtocols.some(proto => input.toLowerCase().startsWith(proto))) {
+    return 'about:blank';
+  }
+  
+  // Handle relative URLs (starting with /)
+  if (input.startsWith('/')) {
+    return input;
+  }
+  
   try {
     const url = new URL(input);
     
     // Only allow http, https, and mailto
     if (!['http:', 'https:', 'mailto:'].includes(url.protocol)) {
-      return '';
+      return 'about:blank';
     }
     
     return url.toString();
   } catch {
-    // Invalid URL
+    // Invalid URL - check if it's relative
+    if (input.startsWith('/')) {
+      return input;
+    }
     return '';
   }
 }

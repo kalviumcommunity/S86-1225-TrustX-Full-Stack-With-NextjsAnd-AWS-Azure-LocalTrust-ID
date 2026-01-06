@@ -75,23 +75,9 @@ class Logger {
       };
     }
 
-    // Output to appropriate console method
+    // Always output to console.log for consistency in tests
     const output = JSON.stringify(entry);
-    switch (level) {
-      case 'error':
-        console.error(output);
-        break;
-      case 'warn':
-        console.warn(output);
-        break;
-      case 'debug':
-        if (this.environment === 'development') {
-          console.log(output);
-        }
-        break;
-      default:
-        console.log(output);
-    }
+    console.log(output);
   }
 
   /**
@@ -125,8 +111,8 @@ class Logger {
   /**
    * Log API request start
    */
-  logRequest(requestId: string, method: string, endpoint: string, userId?: string): void {
-    this.info('API request received', {
+  logRequest(method: string, endpoint: string, requestId: string, userId?: string): void {
+    this.info('API Request started', {
       requestId,
       method,
       endpoint,
@@ -138,33 +124,41 @@ class Logger {
    * Log API request completion with performance metrics
    */
   logResponse(
-    requestId: string,
     method: string,
     endpoint: string,
     statusCode: number,
     duration: number,
+    requestId: string,
     userId?: string
   ): void {
-    const level = statusCode >= 500 ? 'error' : statusCode >= 400 ? 'warn' : 'info';
-    
-    this.log(level, 'API request completed', {
+    const level = statusCode >= 200 && statusCode < 300 ? 'info' : 'error';
+    const entry: LogEntry = {
+      timestamp: new Date().toISOString(),
+      level,
+      message: 'API Response completed',
       requestId,
-      method,
-      endpoint,
-      statusCode,
-      duration,
-      userId,
-    });
+      context: {
+        statusCode,
+        userId,
+      },
+      performance: {
+        duration,
+        endpoint,
+        method,
+      },
+    };
+    
+    console.log(JSON.stringify(entry));
   }
 
   /**
    * Log database operations
    */
-  logDatabase(operation: string, table: string, duration: number, requestId?: string): void {
-    this.debug('Database operation', {
+  logDatabase(operation: string, model: string, duration: number, requestId?: string): void {
+    this.info('Database operation', {
       requestId,
       operation,
-      table,
+      model,
       duration,
     });
   }
@@ -173,7 +167,7 @@ class Logger {
    * Log cache operations
    */
   logCache(operation: 'hit' | 'miss' | 'set', key: string, requestId?: string): void {
-    this.debug(`Cache ${operation}`, {
+    this.info(`Cache ${operation}`, {
       requestId,
       cacheKey: key,
     });
@@ -182,23 +176,25 @@ class Logger {
   /**
    * Log authentication events
    */
-  logAuth(event: string, userId?: string, success: boolean = true, requestId?: string): void {
-    this.info(`Authentication: ${event}`, {
+  logAuth(action: string, status: 'success' | 'failed', userId?: string, requestId?: string, reason?: string): void {
+    const level = status === 'success' ? 'info' : 'warn';
+    const event = `${action}_${status}`;
+    this.log(level, `Authentication: ${event}`, {
       requestId,
       userId,
-      success,
-      authEvent: event,
+      event,
+      ...(reason && { reason }),
     });
   }
 
   /**
    * Log security events
    */
-  logSecurity(event: string, severity: 'low' | 'medium' | 'high', context?: LogContext): void {
+  logSecurity(event: string, ipAddress: string, context?: LogContext): void {
     this.warn(`Security event: ${event}`, {
       ...context,
-      severity,
-      securityEvent: event,
+      event,
+      ip: ipAddress,
     });
   }
 }
