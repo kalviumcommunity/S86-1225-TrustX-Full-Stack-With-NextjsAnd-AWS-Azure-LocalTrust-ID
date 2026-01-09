@@ -1,3 +1,78 @@
+/**
+ * File Upload Endpoint - Presigned URL Generation
+ * 
+ * @swagger
+ * /api/upload:
+ *   post:
+ *     summary: Generate presigned URL for file upload
+ *     description: Get a presigned URL to upload files directly to AWS S3. Maximum file size is 10MB.
+ *     tags: [Files]
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - filename
+ *               - fileType
+ *               - fileSize
+ *             properties:
+ *               filename:
+ *                 type: string
+ *                 example: document.pdf
+ *                 description: Name of the file to upload
+ *               fileType:
+ *                 type: string
+ *                 enum: [image/jpeg, image/png, image/gif, image/webp, application/pdf]
+ *                 example: application/pdf
+ *                 description: MIME type of the file
+ *               fileSize:
+ *                 type: integer
+ *                 example: 1048576
+ *                 description: File size in bytes (max 10MB)
+ *     responses:
+ *       200:
+ *         description: Presigned URL generated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 url:
+ *                   type: string
+ *                   format: uri
+ *                   description: Presigned URL for upload (valid for 5 minutes)
+ *                 key:
+ *                   type: string
+ *                   description: Unique file key in S3
+ *                 expiresIn:
+ *                   type: integer
+ *                   example: 300
+ *                   description: URL expiration time in seconds
+ *       400:
+ *         description: Invalid file type or size
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: Unsupported file type. Allowed JPEG, PNG, GIF, WebP, PDF
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ *       500:
+ *         $ref: '#/components/responses/ServerError'
+ */
 import { NextResponse } from "next/server";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";

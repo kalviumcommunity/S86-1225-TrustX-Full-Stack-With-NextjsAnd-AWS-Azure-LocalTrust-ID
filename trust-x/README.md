@@ -4,6 +4,162 @@
 [![codecov](https://codecov.io/gh/YOUR_USERNAME/trust-x/branch/main/graph/badge.svg)](https://codecov.io/gh/YOUR_USERNAME/trust-x)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+> **LocalTrust-ID** - Full-stack decentralized identity verification and trust management system built with Next.js, AWS/Azure, and enterprise-grade security.
+
+---
+
+## 📚 Documentation
+
+### API Documentation
+- **📖 [Interactive API Docs (Swagger UI)](http://localhost:3000/api-docs.html)** - Browse and test all API endpoints
+- **📄 [OpenAPI Specification](http://localhost:3000/api/docs)** - JSON spec for API integration
+- **🔐 [API Testing Guide](./API-TESTING.sh)** - Authentication and endpoint testing examples
+
+**API Version:** `v1.0.0`  
+**Last Updated:** January 9, 2026  
+**Base URL:** `http://localhost:3000/api`
+
+#### Quick API Reference
+
+| Endpoint | Method | Description | Auth Required |
+|----------|--------|-------------|---------------|
+| `/api/auth/signup` | POST | Register new user | No |
+| `/api/users` | GET | List all users | Yes |
+| `/api/projects` | GET, POST | Manage projects | Yes |
+| `/api/upload` | POST | Upload files | Yes |
+| `/api/health` | GET | System health check | No |
+
+**Authentication:** All protected endpoints require a Bearer token:
+```bash
+Authorization: Bearer <your-jwt-token>
+```
+
+### System Architecture
+- **🏗️ [Architecture Overview](./ARCHITECTURE.md)** - Complete system architecture documentation
+  - Technology stack and component diagrams
+  - Data flow and integration patterns
+  - Deployment architecture (AWS/Azure)
+  - Security architecture layers
+  - Development setup guide
+
+### Version History
+- **📋 [Changelog](./CHANGELOG.md)** - Version history and release notes
+  - v1.0.0 (Current): API Documentation, Swagger, Architecture Docs
+  - Version upgrade guides
+  - Breaking changes and migration paths
+
+### Additional Documentation
+- **📧 [Email Service Guide](./EMAIL-QUICKSTART.md)** - SendGrid integration
+- **🗄️ [Database Guide](./CLOUD-DATABASE-QUICKREF.md)** - PostgreSQL & Prisma
+- **🔐 [Security Guide](./INPUT-SANITIZATION-SUMMARY.md)** - Input validation & sanitization
+- **🧪 [Testing Guide](./INTEGRATION-TESTING-QUICKSTART.md)** - Unit & integration tests
+- **🚀 [Deployment Guide](./DOCKER-DEPLOYMENT-GUIDE.md)** - Docker & cloud deployment
+- **📊 [Monitoring Guide](./LOGGING-QUICKSTART.md)** - Logging & monitoring
+
+---
+
+## 🎯 Quick Start
+
+```bash
+# 1. Install dependencies
+npm install
+
+# 2. Set up environment
+cp .env.example .env
+
+# 3. Start services with Docker
+docker-compose up -d
+
+# 4. Run database migrations
+npm run db:migrate
+npm run db:generate
+
+# 5. Start development server
+npm run dev
+
+# 6. Access application
+# - App: http://localhost:3000
+# - API Docs: http://localhost:3000/api-docs.html
+# - Prisma Studio: npm run db:studio
+```
+
+---
+
+## 🎨 Swagger API Documentation
+
+![Swagger UI](https://img.shields.io/badge/API-Swagger-85EA2D?style=for-the-badge&logo=swagger&logoColor=white)
+
+Interactive API documentation is available at **[http://localhost:3000/api-docs.html](http://localhost:3000/api-docs.html)**
+
+### Features
+- ✅ Interactive endpoint testing
+- ✅ Request/response examples
+- ✅ Schema definitions
+- ✅ Authentication testing
+- ✅ Error response documentation
+- ✅ Copy-paste ready cURL commands
+
+### Example Usage
+
+**1. Open Swagger UI** → `http://localhost:3000/api-docs.html`
+
+**2. Test an endpoint:**
+   - Click on `/api/users` → `GET`
+   - Click "Try it out"
+   - Add Bearer token in the "Authorize" button
+   - Click "Execute"
+
+**3. View response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid-here",
+      "email": "user@example.com",
+      "name": "John Doe",
+      "verificationStatus": "verified"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 10,
+    "total": 100
+  }
+}
+```
+
+### API Documentation Screenshots
+
+| Swagger Overview | Endpoint Details | Authentication |
+|------------------|------------------|----------------|
+| ![Swagger Home](./screenshots/swagger-home.png) | ![Endpoint](./screenshots/swagger-endpoint.png) | ![Auth](./screenshots/swagger-auth.png) |
+
+---
+
+## 📖 Documentation Maintenance
+
+Our documentation is kept up-to-date through:
+
+### Automated Updates
+- ✅ Swagger spec auto-generated from JSDoc comments
+- ✅ CI/CD pipeline validates documentation builds
+- ✅ Version numbers synced across all docs
+
+### PR Requirements
+- ✅ Update relevant documentation for new features
+- ✅ Add JSDoc comments to new API routes
+- ✅ Update CHANGELOG.md with changes
+- ✅ Regenerate API docs if schemas change
+
+### Review Schedule
+- **Weekly**: API documentation accuracy check
+- **Monthly**: Architecture diagram updates
+- **Per Sprint**: Changelog updates
+- **Per Release**: Version number synchronization
+
+---
+
 ## CI/CD Pipeline
 
 This project uses **GitHub Actions** for automated Continuous Integration and Deployment.

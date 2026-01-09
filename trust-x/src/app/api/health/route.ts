@@ -10,6 +10,50 @@ import { prisma } from '@/lib/prisma';
  * - Uptime metrics
  * - Memory usage
  * - Version information
+ * 
+ * @swagger
+ * /api/health:
+ *   get:
+ *     summary: Health check endpoint
+ *     description: Returns comprehensive system health status including database connectivity, memory usage, and uptime
+ *     tags: [Health]
+ *     responses:
+ *       200:
+ *         description: System health information
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/HealthCheck'
+ *             example:
+ *               status: healthy
+ *               timestamp: "2026-01-09T12:00:00.000Z"
+ *               uptime: 3600
+ *               version: "1.0.0"
+ *               environment: production
+ *               database:
+ *                 status: connected
+ *                 type: sqlite
+ *               memory:
+ *                 heapUsed: "45MB"
+ *                 heapTotal: "60MB"
+ *                 rss: "120MB"
+ *               responseTime: 15
+ *       503:
+ *         description: Service unavailable or degraded
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: degraded
+ *                 database:
+ *                   type: object
+ *                   properties:
+ *                     status:
+ *                       type: string
+ *                       example: disconnected
  */
 export async function GET(req: Request) {
   const startTime = Date.now();
