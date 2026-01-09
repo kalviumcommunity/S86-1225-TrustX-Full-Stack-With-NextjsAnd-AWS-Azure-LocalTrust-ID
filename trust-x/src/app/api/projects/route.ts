@@ -2,6 +2,91 @@
  * Projects API Route - CRUD Operations with RBAC
  * GET /api/projects - Retrieve projects (requires 'read' permission)
  * POST /api/projects - Create a new project (requires 'create' permission)
+ * 
+ * @swagger
+ * /api/projects:
+ *   get:
+ *     summary: Retrieve all projects
+ *     description: Get a paginated list of projects with optional filtering. Non-admin users can only see their own projects.
+ *     tags: [Projects]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Items per page
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [active, completed, archived]
+ *         description: Filter by project status
+ *       - in: query
+ *         name: userId
+ *         schema:
+ *           type: string
+ *         description: Filter by user ID (admin only)
+ *     responses:
+ *       200:
+ *         description: Successfully retrieved projects
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Project'
+ *                 pagination:
+ *                   type: object
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ *       403:
+ *         $ref: '#/components/responses/ForbiddenError'
+ *   post:
+ *     summary: Create a new project
+ *     description: Create a new project for the authenticated user
+ *     tags: [Projects]
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - title
+ *             properties:
+ *               title:
+ *                 type: string
+ *                 example: My New Project
+ *               description:
+ *                 type: string
+ *                 example: Project description here
+ *               status:
+ *                 type: string
+ *                 enum: [active, completed, archived]
+ *                 default: active
+ *     responses:
+ *       201:
+ *         description: Project successfully created
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
  */
 
 import { NextRequest, NextResponse } from 'next/server';

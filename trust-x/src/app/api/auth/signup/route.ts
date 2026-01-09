@@ -1,3 +1,82 @@
+/**
+ * User Signup/Registration Endpoint
+ * 
+ * @swagger
+ * /api/auth/signup:
+ *   post:
+ *     summary: Register a new user account
+ *     description: Create a new user account with email and password. Sends a welcome email upon successful registration.
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *               - email
+ *               - password
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 minLength: 2
+ *                 example: John Doe
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 example: john.doe@example.com
+ *               password:
+ *                 type: string
+ *                 format: password
+ *                 minLength: 8
+ *                 description: Must contain at least 8 characters
+ *                 example: SecurePass123!
+ *               role:
+ *                 type: string
+ *                 enum: [USER, ADMIN]
+ *                 default: USER
+ *                 description: User role (defaults to USER)
+ *     responses:
+ *       201:
+ *         description: User successfully registered
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: User registered successfully
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                     name:
+ *                       type: string
+ *                     email:
+ *                       type: string
+ *                     role:
+ *                       type: string
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       409:
+ *         description: User already exists
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *             example:
+ *               error: USER_EXISTS
+ *               message: User already exists
+ *               statusCode: 409
+ *       500:
+ *         $ref: '#/components/responses/ServerError'
+ */
 import { NextResponse } from "next/server";
 import bcrypt from "bcrypt";
 import { prisma } from "../../../../lib/prisma";
