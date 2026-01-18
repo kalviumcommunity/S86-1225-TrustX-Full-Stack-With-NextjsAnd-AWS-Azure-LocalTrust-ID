@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '../../../lib/prisma';
+import { getDb, ObjectId } from '../../../lib/mongodb';
 import { processOrderTransaction } from '../../../lib/transactions';
 
 // GET: Retrieve all orders with pagination and filtering
@@ -19,39 +19,56 @@ export async function GET(req: NextRequest) {
 
     const skip = (page - 1) * limit;
 
-    // Build where clause
+    // Build MongoDB filter
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const whereClause: any = {};
-    if (status) whereClause.status = status;
-    if (userId) whereClause.userId = Number(userId);
+    const filter: any = {};
+    if (status) filter.status = status;
+    if (userId && ObjectId.isValid(userId)) filter.userId = new ObjectId(userId);
+
+    const db = await getDb();
+    const ordersCollection = db.collection('orders');
+    const orderItemsCollection = db.collection('orderItems');
 
     // Fetch orders and total count
-    const [orders, total] = await Promise.all([
-      prisma.order.findMany({
-        where: whereClause,
-        select: {
-          id: true,
-          orderNumber: true,
-          userId: true,
-          totalAmount: true,
-          status: true,
-          createdAt: true,
-          items: {
-            select: { id: true, productId: true, quantity: true, price: true },
-            take: 5,
-          },
-        },
-        skip,
-        take: limit,
-        orderBy: { createdAt: 'desc' },
-      }),
-      prisma.order.count({ where: whereClause }),
+    const [ordersResult, total] = await Promise.all([
+      ordersCollection
+        .find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .toArray(),
+      ordersCollection.countDocuments(filter),
     ]);
+
+    // Fetch items for each order
+    const ordersWithItems = await Promise.all(
+      ordersResult.map(async (order) => {
+        const items = await orderItemsCollection
+          .find({ orderId: order._id })
+          .limit(5)
+          .toArray();
+
+        return {
+          id: order._id.toString(),
+          orderNumber: order.orderNumber,
+          userId: order.userId.toString(),
+          totalAmount: order.totalAmount,
+          status: order.status,
+          createdAt: order.createdAt,
+          items: items.map((item) => ({
+            id: item._id.toString(),
+            productId: item.productId.toString(),
+            quantity: item.quantity,
+            price: item.price,
+          })),
+        };
+      })
+    );
 
     return NextResponse.json(
       {
         success: true,
-        data: orders,
+        data: ordersWithItems,
         pagination: {
           page,
           limit,
@@ -85,18 +102,25 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Validate numeric values
-    if (isNaN(userId) || isNaN(productId) || isNaN(quantity) || quantity <= 0) {
+    // Validate ObjectId values
+    if (!ObjectId.isValid(userId) || !ObjectId.isValid(productId)) {
       return NextResponse.json(
-        { success: false, error: 'Invalid input values' },
+        { success: false, error: 'Invalid userId or productId format' },
+        { status: 400 }
+      );
+    }
+
+    if (isNaN(quantity) || quantity <= 0) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid quantity value' },
         { status: 400 }
       );
     }
 
     // Use transaction to create order
     const result = await processOrderTransaction(
-      Number(userId),
-      Number(productId),
+      userId,
+      productId,
       Number(quantity)
     );
 

@@ -6,7 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '../../../../lib/prisma';
+import { getDb, ObjectId } from '../../../../lib/mongodb';
 
 type RouteParams = {
   params: Promise<{
@@ -21,36 +21,20 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const orderId = Number(id);
 
-    if (isNaN(orderId)) {
+    if (!ObjectId.isValid(id)) {
       return NextResponse.json(
         { success: false, error: 'Invalid order ID' },
         { status: 400 }
       );
     }
 
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
-      include: {
-        items: {
-          select: {
-            id: true,
-            productId: true,
-            quantity: true,
-            price: true,
-          },
-        },
-        payments: {
-          select: {
-            id: true,
-            amount: true,
-            status: true,
-            createdAt: true,
-          },
-        },
-      },
-    });
+    const db = await getDb();
+    const ordersCollection = db.collection('orders');
+    const orderItemsCollection = db.collection('orderItems');
+    const paymentsCollection = db.collection('payments');
+
+    const order = await ordersCollection.findOne({ _id: new ObjectId(id) });
 
     if (!order) {
       return NextResponse.json(
@@ -59,8 +43,36 @@ export async function GET(
       );
     }
 
+    // Fetch related items and payments
+    const [items, payments] = await Promise.all([
+      orderItemsCollection.find({ orderId: new ObjectId(id) }).toArray(),
+      paymentsCollection.find({ orderId: new ObjectId(id) }).toArray(),
+    ]);
+
+    const orderResponse = {
+      id: order._id.toString(),
+      orderNumber: order.orderNumber,
+      userId: order.userId.toString(),
+      totalAmount: order.totalAmount,
+      status: order.status,
+      createdAt: order.createdAt,
+      updatedAt: order.updatedAt,
+      items: items.map((item) => ({
+        id: item._id.toString(),
+        productId: item.productId.toString(),
+        quantity: item.quantity,
+        price: item.price,
+      })),
+      payments: payments.map((payment) => ({
+        id: payment._id.toString(),
+        amount: payment.amount,
+        status: payment.status,
+        createdAt: payment.createdAt,
+      })),
+    };
+
     return NextResponse.json(
-      { success: true, data: order },
+      { success: true, data: orderResponse },
       { status: 200 }
     );
   } catch (error) {
@@ -80,9 +92,8 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
-    const orderId = Number(id);
 
-    if (isNaN(orderId)) {
+    if (!ObjectId.isValid(id)) {
       return NextResponse.json(
         { success: false, error: 'Invalid order ID' },
         { status: 400 }
@@ -101,10 +112,11 @@ export async function PATCH(
       );
     }
 
+    const db = await getDb();
+    const ordersCollection = db.collection('orders');
+
     // Check if order exists
-    const existingOrder = await prisma.order.findUnique({
-      where: { id: orderId },
-    });
+    const existingOrder = await ordersCollection.findOne({ _id: new ObjectId(id) });
 
     if (!existingOrder) {
       return NextResponse.json(
@@ -114,23 +126,26 @@ export async function PATCH(
     }
 
     // Update order status
-    const updatedOrder = await prisma.order.update({
-      where: { id: orderId },
-      data: { status },
-      select: {
-        id: true,
-        orderNumber: true,
-        status: true,
-        totalAmount: true,
-        updatedAt: true,
-      },
-    });
+    await ordersCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { status, updatedAt: new Date() } }
+    );
+
+    const updatedOrder = await ordersCollection.findOne({ _id: new ObjectId(id) });
+
+    const orderResponse = {
+      id: updatedOrder!._id.toString(),
+      orderNumber: updatedOrder!.orderNumber,
+      status: updatedOrder!.status,
+      totalAmount: updatedOrder!.totalAmount,
+      updatedAt: updatedOrder!.updatedAt,
+    };
 
     return NextResponse.json(
       {
         success: true,
         message: 'Order status updated successfully',
-        data: updatedOrder,
+        data: orderResponse,
       },
       { status: 200 }
     );
@@ -151,19 +166,21 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const orderId = Number(id);
 
-    if (isNaN(orderId)) {
+    if (!ObjectId.isValid(id)) {
       return NextResponse.json(
         { success: false, error: 'Invalid order ID' },
         { status: 400 }
       );
     }
 
+    const db = await getDb();
+    const ordersCollection = db.collection('orders');
+    const orderItemsCollection = db.collection('orderItems');
+    const paymentsCollection = db.collection('payments');
+
     // Check if order exists
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
-    });
+    const order = await ordersCollection.findOne({ _id: new ObjectId(id) });
 
     if (!order) {
       return NextResponse.json(
@@ -172,10 +189,12 @@ export async function DELETE(
       );
     }
 
-    // Delete order (cascades to items and payments)
-    await prisma.order.delete({
-      where: { id: orderId },
-    });
+    // Delete order and related items and payments (manual cascade)
+    await Promise.all([
+      ordersCollection.deleteOne({ _id: new ObjectId(id) }),
+      orderItemsCollection.deleteMany({ orderId: new ObjectId(id) }),
+      paymentsCollection.deleteMany({ orderId: new ObjectId(id) }),
+    ]);
 
     return NextResponse.json(
       { success: true, message: 'Order deleted successfully' },

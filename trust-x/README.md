@@ -1,25 +1,430 @@
-# TrustX - Enterprise Next.js Application
+# LocalTrust-ID - Digital Credibility for Local Businesses
 
-[![CI Pipeline](https://github.com/YOUR_USERNAME/trust-x/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_USERNAME/trust-x/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/YOUR_USERNAME/trust-x/branch/main/graph/badge.svg)](https://codecov.io/gh/YOUR_USERNAME/trust-x)
+[![Next.js](https://img.shields.io/badge/Next.js-16.0-black?logo=next.js)](https://nextjs.org/)
+[![MongoDB](https://img.shields.io/badge/MongoDB-6.11-green?logo=mongodb)](https://www.mongodb.com/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-> **LocalTrust-ID** - Full-stack decentralized identity verification and trust management system built with Next.js, AWS/Azure, and enterprise-grade security.
+> **A lightweight verification platform that helps small-scale entrepreneurs establish digital identity and trust online without heavy KYC friction.**
 
 ---
 
-## 📚 Documentation
+## 🎯 Problem & Solution
 
-### API Documentation
-- **📖 [Interactive API Docs (Swagger UI)](http://localhost:3000/api-docs.html)** - Browse and test all API endpoints
-- **📄 [OpenAPI Specification](http://localhost:3000/api/docs)** - JSON spec for API integration
-- **🔐 [API Testing Guide](./API-TESTING.sh)** - Authentication and endpoint testing examples
+### The Problem
+Small-scale entrepreneurs and local businesses face significant challenges:
+- ❌ Lack of digital identity or online presence
+- ❌ No verified credibility to attract customers
+- ❌ Difficulty authenticating legitimacy
+- ❌ Heavy KYC processes are too complex and expensive
 
-**API Version:** `v1.0.0`  
-**Last Updated:** January 9, 2026  
-**Base URL:** `http://localhost:3000/api`
+### Our Solution: LocalTrust-ID
+✅ **Simple Business Profiles** - Create your digital presence in minutes  
+✅ **Lightweight Verification** - Email, phone, and address verification (no heavy KYC)  
+✅ **Trust Score System** - Build credibility through reviews and activity  
+✅ **Community Trust** - Customer reviews and ratings establish reputation  
+✅ **Transparent Badges** - Display verification status publicly
 
-#### Quick API Reference
+---
+
+## 🌟 Features
+
+### For Business Owners
+- 📝 **Easy Registration** - Create business profile with basic information
+- ✅ **Quick Verification** - Verify email, phone, and address in minutes
+- ⭐ **Trust Score** - Automatic credibility score (0-100) based on:
+  - Customer reviews & ratings (40 points)
+  - Verification badges (30 points)
+  - Business age (15 points)
+  - Profile activity & views (15 points)
+- 📊 **Business Dashboard** - Track views, reviews, and trust score
+- 🏆 **Verification Badges** - Display trust indicators on your profile
+
+### For Customers
+- 🔍 **Discover Businesses** - Search by category, location, and trust level
+- 📍 **Local Focus** - Find trusted businesses in your area
+- ⭐ **Review System** - Read and write authentic reviews
+- 🎖️ **Trust Indicators** - See verification badges and trust scores
+- 📱 **Mobile-Friendly** - Access on any device
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Node.js 18+ (LTS recommended)
+- MongoDB Atlas account (free tier) or local MongoDB
+- Git
+
+### Installation
+
+1. **Clone the repository**
+```bash
+git clone <repo-url>
+cd trust-x
+```
+
+2. **Install dependencies**
+```bash
+npm install
+```
+
+3. **Set up environment variables**
+```bash
+# Create .env.local file
+cp .env.example .env.local
+
+# Add your MongoDB connection string
+DATABASE_URL="mongodb+srv://user:pass@cluster0.mongodb.net/?retryWrites=true&w=majority"
+JWT_SECRET="your-secret-key"
+REFRESH_TOKEN_SECRET="your-refresh-secret"
+```
+
+4. **Run the development server**
+```bash
+npm run dev
+```
+
+5. **Open your browser**
+```
+http://localhost:3000
+```
+
+---
+
+## 📖 Usage Guide
+
+### For Business Owners
+
+#### 1. Sign Up & Register Your Business
+1. Visit `http://localhost:3000/signup`
+2. Create your user account
+3. Navigate to `/businesses/register`
+4. Fill in your business details:
+   - Name & Category
+   - Description
+   - Location
+   - Contact Information
+
+#### 2. Verify Your Business
+1. Go to your Business Dashboard (`/businesses/dashboard`)
+2. Click "Add Verification"
+3. Complete verifications:
+   - ✉️ Email Verification
+   - 📞 Phone Verification
+   - 📍 Address Verification
+4. Earn trust badges instantly!
+
+#### 3. Build Your Trust Score
+- Encourage customers to leave reviews
+- Keep your profile updated
+- Respond to customer inquiries
+- Stay active on the platform
+
+### For Customers
+
+#### 1. Discover Businesses
+1. Visit `http://localhost:3000/businesses`
+2. Use filters to find what you need:
+   - Search by name or description
+   - Filter by category
+   - Filter by location
+   - Show only verified businesses
+
+#### 2. Review a Business
+1. Visit the business profile page
+2. Click "Write Review"
+3. Rate 1-5 stars and leave a comment
+4. Submit to help others make informed decisions
+
+---
+
+## 🗄️ Database: MongoDB
+
+This project uses **MongoDB** with native driver for flexible, scalable data storage.
+
+### Collections
+
+#### `businesses`
+```javascript
+{
+  _id: ObjectId,
+  ownerId: ObjectId,  // Reference to users collection
+  name: String,
+  category: String,
+  description: String,
+  location: {
+    address: String,
+    city: String,
+    state: String,
+    country: String,
+    zipCode: String
+  },
+  contactInfo: {
+    email: String,
+    phone: String,
+    website: String
+  },
+  trustScore: Number,  // 0-100
+  isVerified: Boolean,
+  verificationBadges: Array,  // ['email_verified', 'phone_verified', 'address_verified']
+  verificationHistory: Array,
+  reviewCount: Number,
+  averageRating: Number,  // 0-5
+  totalViews: Number,
+  logo: String,
+  coverImage: String,
+  gallery: Array,
+  businessHours: Object,
+  socialLinks: Object,
+  status: String,  // 'active', 'deleted'
+  createdAt: Date,
+  updatedAt: Date
+}
+```
+
+#### `reviews`
+```javascript
+{
+  _id: ObjectId,
+  businessId: ObjectId,
+  userId: ObjectId,
+  rating: Number,  // 1-5
+  comment: String,
+  status: String,  // 'active', 'deleted'
+  createdAt: Date,
+  updatedAt: Date
+}
+```
+
+#### `users`
+```javascript
+{
+  _id: ObjectId,
+  name: String,
+  email: String,
+  password: String,  // Hashed
+  role: String,  // 'USER', 'ADMIN'
+  createdAt: Date,
+  updatedAt: Date
+}
+```
+
+### MongoDB Setup
+
+**Option 1: MongoDB Atlas (Recommended)**
+1. Create free account at [mongodb.com/cloud/atlas](https://www.mongodb.com/cloud/atlas)
+2. Create a cluster (M0 Free Tier)
+3. Add your IP to whitelist
+4. Create database user
+5. Get connection string
+6. Add to `.env.local` as `DATABASE_URL`
+
+**Option 2: Local MongoDB**
+```bash
+# Install MongoDB Community Server
+# macOS: brew install mongodb-community
+# Windows: Download from mongodb.com
+
+# Start MongoDB
+mongod --dbpath /path/to/data
+
+# Connection string
+DATABASE_URL="mongodb://localhost:27017/localtrust"
+```
+
+---
+
+## 🏗️ Project Structure
+
+```
+trust-x/
+├── src/
+│   ├── app/                    # Next.js App Router
+│   │   ├── page.tsx           # Home page (LocalTrust-ID landing)
+│   │   ├── login/             # Login page
+│   │   ├── signup/            # Signup page
+│   │   ├── businesses/        # Business pages
+│   │   │   ├── page.tsx       # Business discovery/search
+│   │   │   ├── register/      # Register new business
+│   │   │   ├── dashboard/     # Business owner dashboard
+│   │   │   └── [id]/          # Business profile page
+│   │   └── api/               # API Routes
+│   │       ├── auth/          # Authentication
+│   │       ├── users/         # User management
+│   │       └── businesses/    # Business APIs
+│   │           ├── route.ts           # List/create businesses
+│   │           └── [id]/
+│   │               ├── route.ts       # Get/update/delete business
+│   │               ├── reviews/       # Reviews system
+│   │               └── verify/        # Verification system
+│   ├── components/            # React components
+│   ├── lib/                   # Utilities
+│   │   ├── mongodb.ts        # MongoDB connection
+│   │   ├── rbac.ts           # Role-based access control
+│   │   └── responseHandler.ts # API responses
+│   └── hooks/                 # Custom React hooks
+├── scripts/                   # Utility scripts
+│   ├── check-users.js        # Check MongoDB users
+│   └── create-businesses-via-api.js  # Create sample data
+├── public/                    # Static files
+└── package.json              # Dependencies
+
+```
+
+---
+
+## 🔐 API Endpoints
+
+### Authentication
+- `POST /api/auth/signup` - Create new user account
+- `POST /api/auth/login` - Login and get JWT token
+- `GET /api/auth/me` - Get current user info
+- `POST /api/auth/refresh` - Refresh access token
+
+### Businesses
+- `GET /api/businesses` - List all businesses (with filters)
+- `POST /api/businesses` - Create new business (requires auth)
+- `GET /api/businesses/[id]` - Get business details
+- `PUT /api/businesses/[id]` - Update business (owner/admin only)
+- `DELETE /api/businesses/[id]` - Delete business (owner/admin only)
+
+### Reviews
+- `GET /api/businesses/[id]/reviews` - Get all reviews
+- `POST /api/businesses/[id]/reviews` - Add review (requires auth)
+
+### Verification
+- `POST /api/businesses/[id]/verify` - Submit verification
+- `GET /api/businesses/[id]/verify` - Get verification status
+
+---
+
+## 🎨 Tech Stack
+
+- **Frontend**: Next.js 16, React, TypeScript, Tailwind CSS
+- **Backend**: Next.js API Routes, Node.js
+- **Database**: MongoDB (Native Driver)
+- **Authentication**: JWT (Access & Refresh Tokens)
+- **Deployment**: Vercel / Docker
+
+---
+
+## 🧪 Testing
+
+### Manual Testing
+
+1. **Create sample businesses**
+```bash
+node scripts/create-businesses-via-api.js
+# Follow instructions to paste script in browser console
+```
+
+2. **Test user flow**
+- Sign up at `/signup`
+- Login at `/login`
+- Register business at `/businesses/register`
+- Verify business at `/businesses/dashboard`
+- Browse businesses at `/businesses`
+- Leave a review on any business
+
+### API Testing
+```bash
+# Check MongoDB connection
+node scripts/check-users.js
+
+# Test authentication
+curl -X POST http://localhost:3000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"password"}'
+```
+
+---
+
+## 📊 Trust Score Algorithm
+
+The LocalTrust-ID trust score is calculated automatically:
+
+```
+Trust Score (0-100) = 
+  Reviews & Ratings (40 points) +
+  Verification Badges (30 points) +
+  Business Age (15 points) +
+  Activity & Views (15 points)
+```
+
+### Breakdown:
+- **Reviews (40 pts)**
+  - Average rating: 30 points max (5-star = 30 pts)
+  - Review count: 10 points max (10+ reviews = 10 pts)
+  
+- **Verification (30 pts)**
+  - Email verified: 10 points
+  - Phone verified: 10 points
+  - Address verified: 10 points
+  
+- **Business Age (15 pts)**
+  - Linear scale: 0-15 points over 30 days
+  - 30+ days old = 15 points
+  
+- **Activity (15 pts)**
+  - Profile views: 100+ views = 15 points
+
+---
+
+## 🚢 Deployment
+
+### Vercel (Recommended)
+1. Push code to GitHub
+2. Connect repository to Vercel
+3. Add environment variables in Vercel dashboard
+4. Deploy
+
+### Docker
+```bash
+# Build image
+docker build -t localtrust-id .
+
+# Run container
+docker run -p 3000:3000 -e DATABASE_URL="..." localtrust-id
+```
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please follow these steps:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+---
+
+## 📝 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+## 📧 Support
+
+- **Issues**: [GitHub Issues](https://github.com/your-repo/issues)
+- **Email**: support@localtrust-id.com
+- **Documentation**: This README
+
+---
+
+## 🙏 Acknowledgments
+
+- Built with Next.js and MongoDB
+- Inspired by the need for accessible business credibility solutions
+- Thanks to all contributors
+
+---
+
+**Made with ❤️ for small business owners everywhere**
 
 | Endpoint | Method | Description | Auth Required |
 |----------|--------|-------------|---------------|
@@ -65,19 +470,22 @@ Authorization: Bearer <your-jwt-token>
 npm install
 
 # 2. Set up environment
-cp .env.example .env
+cp .env.example .env.local
 
-# 3. Start services with Docker
-docker-compose up -d
+# 3. Configure MongoDB connection in .env.local
+# Local: DATABASE_URL="mongodb://localhost:27017/trustxdb"
+# Atlas: DATABASE_URL="mongodb+srv://user:pass@cluster.mongodb.net/trustxdb?retryWrites=true&w=majority"
 
-# 4. Run database migrations
-npm run db:migrate
-npm run db:generate
+# 4. Generate Prisma Client
+npx prisma generate
 
-# 5. Start development server
+# 5. Push database schema
+npx prisma db push
+
+# 6. Start development server
 npm run dev
 
-# 6. Access application
+# 7. Access application
 # - App: http://localhost:3000
 # - API Docs: http://localhost:3000/api-docs.html
 # - Prisma Studio: npm run db:studio

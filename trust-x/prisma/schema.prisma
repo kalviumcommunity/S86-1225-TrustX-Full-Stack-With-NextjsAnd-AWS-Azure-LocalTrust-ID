@@ -3,12 +3,12 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "mongodb"
   url      = env("DATABASE_URL")
 }
 
 model User {
-  id        Int       @id @default(autoincrement())
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
   name      String
   email     String    @unique
   password  String
@@ -28,11 +28,11 @@ model User {
 }
 
 model Project {
-  id        Int       @id @default(autoincrement())
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
   title     String
   status    String    @default("active")
 
-  userId    Int
+  userId    String    @db.ObjectId
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   tasks     Task[]
@@ -46,12 +46,12 @@ model Project {
 }
 
 model Task {
-  id        Int       @id @default(autoincrement())
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
   title     String
   status    String    @default("pending")
   priority  String    @default("medium")
 
-  projectId Int
+  projectId String    @db.ObjectId
   project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   createdAt DateTime  @default(now())
@@ -65,9 +65,9 @@ model Task {
 
 // Order model for transaction examples
 model Order {
-  id        Int       @id @default(autoincrement())
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
   orderNumber String  @unique
-  userId    Int
+  userId    String    @db.ObjectId
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   status    String    @default("pending")
@@ -87,11 +87,11 @@ model Order {
 }
 
 model OrderItem {
-  id        Int       @id @default(autoincrement())
-  orderId   Int
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  orderId   String    @db.ObjectId
   order     Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
   
-  productId Int
+  productId String    @db.ObjectId
   product   Product   @relation(fields: [productId], references: [id])
   
   quantity  Int
@@ -105,7 +105,7 @@ model OrderItem {
 }
 
 model Product {
-  id        Int       @id @default(autoincrement())
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
   name      String
   description String?
   sku       String    @unique
@@ -124,8 +124,8 @@ model Product {
 }
 
 model Inventory {
-  id        Int       @id @default(autoincrement())
-  productId Int       @unique
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  productId String    @unique @db.ObjectId
   product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
   
   warehouseLocation String
@@ -141,11 +141,11 @@ model Inventory {
 }
 
 model Payment {
-  id        Int       @id @default(autoincrement())
-  orderId   Int
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  orderId   String    @db.ObjectId
   order     Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
   
-  userId    Int
+  userId    String    @db.ObjectId
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   amount    Float
@@ -164,12 +164,12 @@ model Payment {
 }
 
 model File {
-  id        Int       @id @default(autoincrement())
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
   name      String
   url       String
   size      Int?
   type      String
-  userId    Int?
+  userId    String?   @db.ObjectId
   user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   createdAt DateTime  @default(now())
@@ -181,7 +181,7 @@ model File {
 }
 
 model Comment {
-  id         Int      @id @default(autoincrement())
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
   content    String
   authorName String
   

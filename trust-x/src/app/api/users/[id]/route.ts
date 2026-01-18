@@ -6,7 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '../../../../lib/prisma';
+import { getDb, ObjectId } from '../../../../lib/mongodb';
 
 type RouteParams = {
   params: Promise<{
@@ -20,38 +20,53 @@ export async function GET(
   { params }: RouteParams
 ) {
   try {
+    const db = await getDb();
     const { id } = await params;
-    const userId = Number(id);
 
-    if (isNaN(userId)) {
+    if (!ObjectId.isValid(id)) {
       return NextResponse.json(
         { success: false, error: 'Invalid user ID' },
         { status: 400 }
       );
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        createdAt: true,
-        updatedAt: true,
-        projects: {
-          select: { id: true, title: true },
-          take: 5,
+    const userRaw = await db.collection('users').findOne(
+      { _id: new ObjectId(id) },
+      {
+        projection: {
+          _id: 1,
+          name: 1,
+          email: 1,
+          role: 1,
+          createdAt: 1,
+          updatedAt: 1,
         },
-      },
-    });
+      }
+    );
 
-    if (!user) {
+    if (!userRaw) {
       return NextResponse.json(
         { success: false, error: 'User not found' },
         { status: 404 }
       );
     }
+
+    // Fetch associated projects (limit 5)
+    const projects = await db.collection('projects')
+      .find({ userId: new ObjectId(id) })
+      .limit(5)
+      .project({ _id: 1, title: 1 })
+      .toArray();
+
+    const user = {
+      id: userRaw._id.toString(),
+      name: userRaw.name,
+      email: userRaw.email,
+      role: userRaw.role,
+      createdAt: userRaw.createdAt,
+      updatedAt: userRaw.updatedAt,
+      projects: projects.map(p => ({ id: p._id.toString(), title: p.title })),
+    };
 
     return NextResponse.json(
       { success: true, data: user },
@@ -73,10 +88,10 @@ export async function PUT(
   { params }: RouteParams
 ) {
   try {
+    const db = await getDb();
     const { id } = await params;
-    const userId = Number(id);
 
-    if (isNaN(userId)) {
+    if (!ObjectId.isValid(id)) {
       return NextResponse.json(
         { success: false, error: 'Invalid user ID' },
         { status: 400 }
@@ -87,8 +102,8 @@ export async function PUT(
     const { name, email, role } = body;
 
     // Check if user exists
-    const existingUser = await prisma.user.findUnique({
-      where: { id: userId },
+    const existingUser = await db.collection('users').findOne({
+      _id: new ObjectId(id),
     });
 
     if (!existingUser) {
@@ -100,8 +115,8 @@ export async function PUT(
 
     // Check if new email is unique (if changing email)
     if (email && email !== existingUser.email) {
-      const emailExists = await prisma.user.findUnique({
-        where: { email },
+      const emailExists = await db.collection('users').findOne({
+        email,
       });
       if (emailExists) {
         return NextResponse.json(
@@ -111,22 +126,39 @@ export async function PUT(
       }
     }
 
+    // Build update data
+    const updateData: any = { updatedAt: new Date() };
+    if (name) updateData.name = name;
+    if (email) updateData.email = email;
+    if (role) updateData.role = role;
+
     // Update user
-    const updatedUser = await prisma.user.update({
-      where: { id: userId },
-      data: {
-        ...(name && { name }),
-        ...(email && { email }),
-        ...(role && { role }),
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        updatedAt: true,
-      },
-    });
+    await db.collection('users').updateOne(
+      { _id: new ObjectId(id) },
+      { $set: updateData }
+    );
+
+    // Fetch updated user
+    const updatedUserRaw = await db.collection('users').findOne(
+      { _id: new ObjectId(id) },
+      {
+        projection: {
+          _id: 1,
+          name: 1,
+          email: 1,
+          role: 1,
+          updatedAt: 1,
+        },
+      }
+    );
+
+    const updatedUser = {
+      id: updatedUserRaw!._id.toString(),
+      name: updatedUserRaw!.name,
+      email: updatedUserRaw!.email,
+      role: updatedUserRaw!.role,
+      updatedAt: updatedUserRaw!.updatedAt,
+    };
 
     return NextResponse.json(
       {
@@ -152,10 +184,10 @@ export async function DELETE(
   { params }: RouteParams
 ) {
   try {
+    const db = await getDb();
     const { id } = await params;
-    const userId = Number(id);
 
-    if (isNaN(userId)) {
+    if (!ObjectId.isValid(id)) {
       return NextResponse.json(
         { success: false, error: 'Invalid user ID' },
         { status: 400 }
@@ -163,8 +195,8 @@ export async function DELETE(
     }
 
     // Check if user exists
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
+    const user = await db.collection('users').findOne({
+      _id: new ObjectId(id),
     });
 
     if (!user) {
@@ -174,9 +206,9 @@ export async function DELETE(
       );
     }
 
-    // Delete user (cascade deletes handled by database)
-    await prisma.user.delete({
-      where: { id: userId },
+    // Delete user
+    await db.collection('users').deleteOne({
+      _id: new ObjectId(id),
     });
 
     return NextResponse.json(

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { verifyRefreshToken, generateAccessToken } from '../../../../lib/jwt';
-import { prisma } from '../../../../lib/prisma';
+import { getDb, ObjectId } from '../../../../lib/mongodb';
 
 /**
  * POST /api/auth/refresh
@@ -43,9 +43,8 @@ export async function POST(req: Request) {
     }
 
     // Verify user still exists and is active
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.id }
-    });
+    const db = await getDb();
+    const user = await db.collection('users').findOne({ _id: new ObjectId(decoded.id) });
 
     if (!user) {
       return NextResponse.json(

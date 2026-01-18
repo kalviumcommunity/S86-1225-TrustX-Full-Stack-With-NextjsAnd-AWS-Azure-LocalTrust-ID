@@ -9,7 +9,7 @@ import { requireAuth } from '@/lib/rbac';
 import { sendSuccess, sendError } from '@/lib/responseHandler';
 import { sanitizeBasic, sanitizeStrict, logSanitization } from '@/lib/sanitize';
 import { commentSchema } from '@/lib/validation';
-import { prisma } from '@/lib/prisma';
+import { getDb, ObjectId } from '@/lib/mongodb';
 
 /**
  * GET - Fetch comments (safe output demonstration)
@@ -23,22 +23,26 @@ export async function GET(req: NextRequest) {
 
   try {
     // Fetch comments from database
-    const comments = await prisma.comment.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 50,
-      select: {
-        id: true,
-        content: true,
-        authorName: true,
-        createdAt: true,
-      },
-    });
+    const db = await getDb();
+    const comments = await db.collection('comments')
+      .find({}, {
+        projection: {
+          _id: 1,
+          content: 1,
+          authorName: 1,
+          createdAt: 1,
+        },
+        sort: { createdAt: -1 },
+        limit: 50,
+      })
+      .toArray();
 
     // Additional sanitization on output (defense in depth)
     const sanitizedComments = comments.map(comment => ({
-      ...comment,
+      id: comment._id.toString(),
       content: sanitizeBasic(comment.content),
       authorName: sanitizeStrict(comment.authorName || 'Anonymous'),
+      createdAt: comment.createdAt,
     }));
 
     return sendSuccess(sanitizedComments, 'Comments fetched successfully', 200);
@@ -65,18 +69,18 @@ export async function POST(req: NextRequest) {
     console.log('📥 [INPUT] Received comment data');
 
     // Validate and sanitize using Zod schema
-    const result = commentSchema.safeParse(body);
+    const validationResult = commentSchema.safeParse(body);
 
-    if (!result.success) {
+    if (!validationResult.success) {
       return sendError(
         'Validation failed',
         'VALIDATION_ERROR',
         400,
-        result.error.format()
+        validationResult.error.format()
       );
     }
 
-    const { content, authorName } = result.data;
+    const { content, authorName } = validationResult.data;
 
     // Additional manual sanitization with logging
     const sanitizedContent = sanitizeBasic(content);
@@ -90,13 +94,23 @@ export async function POST(req: NextRequest) {
       logSanitization('authorName', authorName, sanitizedAuthorName, 'sanitizeStrict');
     }
 
-    // Create comment in database (using parameterized query - SQL injection safe)
-    const comment = await prisma.comment.create({
-      data: {
-        content: sanitizedContent,
-        authorName: sanitizedAuthorName,
-      },
+    // Create comment in database (using MongoDB native - injection safe)
+    const db = await getDb();
+    const now = new Date();
+    const insertResult = await db.collection('comments').insertOne({
+      content: sanitizedContent,
+      authorName: sanitizedAuthorName,
+      createdAt: now,
+      updatedAt: now,
     });
+
+    const comment = {
+      id: insertResult.insertedId.toString(),
+      content: sanitizedContent,
+      authorName: sanitizedAuthorName,
+      createdAt: now,
+      updatedAt: now,
+    };
 
     console.log('✅ [SANITIZE] Comment created safely:', comment.id);
 

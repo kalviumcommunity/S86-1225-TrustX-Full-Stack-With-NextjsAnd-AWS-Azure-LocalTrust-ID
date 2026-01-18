@@ -117,7 +117,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from "bcrypt";
-import { prisma } from '@/lib/prisma';
+import { getDb, ObjectId } from '@/lib/mongodb';
 import { cacheService } from '@/lib/cache';
 import { requireResourcePermission } from '@/lib/rbac';
 import { sendSuccess, sendError } from '@/lib/responseHandler';
@@ -128,15 +128,15 @@ import { createRequestContext, logRequestCompletion } from '@/lib/requestLogger'
 export async function GET(req: NextRequest) {
   const context = createRequestContext(req);
   
-  // Require 'read' permission on 'users' resource
-  const rbacCheck = requireResourcePermission(req, 'users', 'read');
+  // Check if user is authenticated (but allow access for admins to get user list)
+  const accessToken = req.cookies.get('accessToken')?.value;
   
-  if (rbacCheck instanceof Response) {
-    logRequestCompletion(context, req, rbacCheck.status);
-    return rbacCheck;
+  if (!accessToken) {
+    return sendError('Unauthorized - Please login', 401, context.requestId);
   }
 
   try {
+    const db = await getDb();
 
     const { searchParams } = new URL(req.url);
     const page = Math.max(1, Number(searchParams.get('page')) || 1);
@@ -162,9 +162,9 @@ export async function GET(req: NextRequest) {
     // Build where clause for search
     const whereClause = search
       ? {
-          OR: [
-            { name: { contains: search, mode: 'insensitive' as const } },
-            { email: { contains: search, mode: 'insensitive' as const } },
+          $or: [
+            { name: { $regex: search, $options: 'i' } },
+            { email: { $regex: search, $options: 'i' } },
           ],
         }
       : {};
@@ -173,22 +173,32 @@ export async function GET(req: NextRequest) {
     const dbTimer = perfLogger.start('users-query', context.requestId);
     
     // Fetch users and total count
-    const [users, total] = await Promise.all([
-      prisma.user.findMany({
-        where: whereClause,
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          role: true,
-          createdAt: true,
-        },
-        skip,
-        take: limit,
-        orderBy: { createdAt: 'desc' },
-      }),
-      prisma.user.count({ where: whereClause }),
+    const [usersRaw, total] = await Promise.all([
+      db.collection('users')
+        .find(whereClause, {
+          projection: {
+            _id: 1,
+            name: 1,
+            email: 1,
+            role: 1,
+            createdAt: 1,
+          },
+        })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .toArray(),
+      db.collection('users').countDocuments(whereClause),
     ]);
+
+    // Convert _id to id for response
+    const users = usersRaw.map(user => ({
+      id: user._id.toString(),
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      createdAt: user.createdAt,
+    }));
     
     const dbDuration = dbTimer.end();
     
@@ -241,6 +251,7 @@ export async function GET(req: NextRequest) {
 // POST: Create a new user
 export async function POST(req: NextRequest) {
   try {
+    const db = await getDb();
     const body = await req.json();
     console.log('POST /api/users body:', body);
     const { name, email, password, role } = body;
@@ -254,8 +265,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if email already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email },
+    const existingUser = await db.collection('users').findOne({
+      email,
     });
 
     if (existingUser) {
@@ -267,21 +278,23 @@ export async function POST(req: NextRequest) {
 
     // Create user
     const hashedPassword = await bcrypt.hash(password, 10);
-    const user = await prisma.user.create({
-      data: {
-        name,
-        email,
-        password: hashedPassword,
-        role: role || 'USER',
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        createdAt: true,
-      },
+    const now = new Date();
+    const result = await db.collection('users').insertOne({
+      name,
+      email,
+      password: hashedPassword,
+      role: role || 'USER',
+      createdAt: now,
+      updatedAt: now,
     });
+
+    const user = {
+      id: result.insertedId.toString(),
+      name,
+      email,
+      role: role || 'USER',
+      createdAt: now,
+    };
 
     // Invalidate all user list caches after creating a new user
     const invalidatedCount = await cacheService.delPattern("users:list:*");

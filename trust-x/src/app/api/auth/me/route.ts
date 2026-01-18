@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import jwt from 'jsonwebtoken';
-import { PrismaClient } from '@prisma/client';
+import { getDb } from '../../../../lib/mongodb';
 
-const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
@@ -20,26 +22,36 @@ export async function GET() {
 
     const decoded = jwt.verify(accessToken, JWT_SECRET) as any;
     
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.id },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        createdAt: true,
-        updatedAt: true
-      }
-    });
-
-    if (!user) {
+    const db = await getDb();
+    
+    // JWT contains email, not id
+    const userData = await db.collection('users').findOne(
+      { email: decoded.email },
+      { projection: { password: 0 } }
+    );
+    
+    if (!userData) {
       return NextResponse.json(
         { error: 'User not found' },
         { status: 404 }
       );
     }
 
-    return NextResponse.json({ user });
+    const user = {
+      id: userData._id.toString(),
+      name: userData.name,
+      email: userData.email,
+      role: userData.role || 'USER',
+      createdAt: userData.createdAt,
+      updatedAt: userData.updatedAt
+    };
+
+    return NextResponse.json({ 
+      data: { user },
+      success: true,
+      message: 'User profile retrieved successfully'
+    });
+
   } catch (error) {
     console.error('Get user error:', error);
     return NextResponse.json(

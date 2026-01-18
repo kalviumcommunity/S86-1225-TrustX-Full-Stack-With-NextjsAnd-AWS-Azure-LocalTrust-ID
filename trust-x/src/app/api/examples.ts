@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '../../lib/prisma';
+import { getDb, ObjectId } from '../../lib/mongodb';
 import {
   processOrderTransaction,
   complexOrderTransaction,
@@ -236,23 +236,38 @@ export async function updateOrderStatus(
       );
     }
 
-    // Update order and related payment in atomic transaction
-    await prisma.$transaction(async (tx) => {
-      const updatedOrder = await tx.order.update({
-        where: { id: orderId },
-        data: { status },
-      });
+    // Update order and related payment (MongoDB atomic operations)
+    const db = await getDb();
+    if (!ObjectId.isValid(orderId.toString())) {
+      return NextResponse.json(
+        { error: 'Invalid order ID' },
+        { status: 400 }
+      );
+    }
 
-      // Update payment if status provided
-      if (paymentStatus) {
-        await tx.payment.updateMany({
-          where: { orderId },
-          data: { status: paymentStatus },
-        });
-      }
+    const updatedOrder = await db.collection('orders').findOneAndUpdate(
+      { _id: new ObjectId(orderId) },
+      { 
+        $set: { 
+          status,
+          updatedAt: new Date(),
+        } 
+      },
+      { returnDocument: 'after' }
+    );
 
-      return { updatedOrder };
-    });
+    // Update payment if status provided
+    if (paymentStatus) {
+      await db.collection('payments').updateMany(
+        { orderId: new ObjectId(orderId) },
+        { 
+          $set: { 
+            status: paymentStatus,
+            updatedAt: new Date(),
+          } 
+        }
+      );
+    }
 
     return NextResponse.json(
       {
@@ -280,23 +295,35 @@ export async function getUsers(request: NextRequest) {
     const { users, total, duration } = await monitoredQuery(
       `Fetch users page ${page}, limit ${limit}`,
       async () => {
+        const db = await getDb();
         const [users, total] = await Promise.all([
-          prisma.user.findMany({
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              role: true,
-              createdAt: true,
-            },
-            skip: (page - 1) * limit,
-            take: limit,
-            orderBy: { createdAt: 'desc' },
-          }),
-          prisma.user.count(),
+          db.collection('users')
+            .find({}, {
+              projection: {
+                _id: 1,
+                name: 1,
+                email: 1,
+                role: 1,
+                createdAt: 1,
+              },
+              skip: (page - 1) * limit,
+              limit: limit,
+              sort: { createdAt: -1 },
+            })
+            .toArray(),
+          db.collection('users').countDocuments(),
         ]);
 
-        return { users, total, duration: 0 };
+        // Convert _id to id
+        const formattedUsers = users.map(user => ({
+          id: user._id.toString(),
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          createdAt: user.createdAt,
+        }));
+
+        return { users: formattedUsers, total, duration: 0 };
       },
       'query'
     );
@@ -341,9 +368,14 @@ export async function batchCreateProducts(request: NextRequest) {
       `Batch create ${products.length} products`,
       async () => {
         const startTime = Date.now();
-        await prisma.product.createMany({
-          data: products,
-        });
+        const db = await getDb();
+        const now = new Date();
+        const productsWithTimestamps = products.map(product => ({
+          ...product,
+          createdAt: now,
+          updatedAt: now,
+        }));
+        await db.collection('products').insertMany(productsWithTimestamps);
         return { duration: Date.now() - startTime };
       },
       'create'

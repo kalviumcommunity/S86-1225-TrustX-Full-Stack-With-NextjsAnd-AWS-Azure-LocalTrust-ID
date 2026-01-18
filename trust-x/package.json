@@ -22,7 +22,6 @@
     "test:integration:coverage": "jest --config jest.integration.config.js --coverage",
     "test:smoke": "jest --testPathPattern=__smoke_tests__ --runInBand --forceExit",
     "test:all": "npm test && npm run test:integration",
-    "test:cache": "node cache-test.js",
     "test:db": "node scripts/test-db-connection.js",
     "test:upload": "node scripts/test-upload.js",
     "api:docs": "echo 'API Documentation available at: http://localhost:3000/api-docs.html'",
@@ -31,9 +30,6 @@
     "storage:health": "curl http://localhost:3000/api/upload/health",
     "secrets:health": "curl http://localhost:3000/api/health/secrets",
     "secrets:refresh": "curl -X POST http://localhost:3000/api/health/secrets/refresh",
-    "db:migrate": "prisma migrate deploy",
-    "db:generate": "prisma generate",
-    "db:studio": "prisma studio",
     "build-storybook": "storybook build"
   },
   "dependencies": {
@@ -52,6 +48,7 @@
     "ioredis": "^5.8.2",
     "isomorphic-dompurify": "^2.35.0",
     "jsonwebtoken": "^9.0.3",
+    "mongodb": "^6.11.0",
     "next": "^16.0.10",
     "react": "19.2.1",
     "react-dom": "19.2.1",
@@ -65,7 +62,6 @@
   },
   "devDependencies": {
     "@chromatic-com/storybook": "^4.1.3",
-    "@prisma/client": "^6.19.1",
     "@storybook/addon-a11y": "^10.1.10",
     "@storybook/addon-docs": "^10.1.10",
     "@storybook/addon-onboarding": "^10.1.10",
@@ -101,7 +97,6 @@
     "node-mocks-http": "^1.17.2",
     "playwright": "^1.57.0",
     "prettier": "^3",
-    "prisma": "^6.19.1",
     "storybook": "^10.1.10",
     "supertest": "^7.2.0",
     "swagger-jsdoc": "^6.2.8",

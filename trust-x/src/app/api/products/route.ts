@@ -5,7 +5,7 @@
  */
 
 import { NextRequest } from 'next/server';
-import { prisma } from '../../../lib/prisma';
+import { getDb } from '../../../lib/mongodb';
 import { sendSuccess, sendError } from '../../../lib/responseHandler';
 import { ERROR_CODES } from '../../../lib/errorCodes';
 import { productCreateSchema, ProductCreateInput } from '../../../lib/schemas/productSchema';
@@ -23,42 +23,56 @@ export async function GET(req: NextRequest) {
 
     const skip = (page - 1) * limit;
 
-    // Build where clause for filtering
+    // Build MongoDB filter
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const whereClause: any = {};
+    const filter: any = {};
 
     if (search) {
-      whereClause.OR = [
-        { name: { contains: search, mode: 'insensitive' as const } },
-        { description: { contains: search, mode: 'insensitive' as const } },
+      filter.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
       ];
     }
 
     if (minPrice || maxPrice) {
-      whereClause.price = {};
-      if (minPrice) whereClause.price.gte = Number(minPrice);
-      if (maxPrice) whereClause.price.lte = Number(maxPrice);
+      filter.price = {};
+      if (minPrice) filter.price.$gte = Number(minPrice);
+      if (maxPrice) filter.price.$lte = Number(maxPrice);
     }
 
+    const db = await getDb();
+    const productsCollection = db.collection('products');
+
     // Fetch products and total count
-    const [products, total] = await Promise.all([
-      prisma.product.findMany({
-        where: whereClause,
-        select: {
-          id: true,
-          name: true,
-          description: true,
-          price: true,
-          stock: true,
-          sku: true,
-          createdAt: true,
-        },
-        skip,
-        take: limit,
-        orderBy: { createdAt: 'desc' },
-      }),
-      prisma.product.count({ where: whereClause }),
+    const [productsResult, total] = await Promise.all([
+      productsCollection
+        .find(filter)
+        .project({
+          _id: 1,
+          name: 1,
+          description: 1,
+          price: 1,
+          stock: 1,
+          sku: 1,
+          createdAt: 1,
+        })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .toArray(),
+      productsCollection.countDocuments(filter),
     ]);
+
+    // Map _id to id
+    const products = productsResult.map((product) => ({
+      id: product._id.toString(),
+      name: product.name,
+      description: product.description,
+      price: product.price,
+      stock: product.stock,
+      sku: product.sku,
+      createdAt: product.createdAt,
+    }));
 
     return sendSuccess(
       {
@@ -95,33 +109,40 @@ export async function POST(req: NextRequest) {
       throw err;
     }
 
+    const db = await getDb();
+    const productsCollection = db.collection('products');
+
     // Check if SKU is unique (if provided)
     if (validated.sku) {
-      const existingProduct = await prisma.product.findFirst({ where: { sku: validated.sku } });
+      const existingProduct = await productsCollection.findOne({ sku: validated.sku });
       if (existingProduct) {
         return sendError('SKU already exists', ERROR_CODES.VALIDATION_ERROR, 409);
       }
     }
 
-    // Create product
-    const product = await prisma.product.create({
-      data: {
-        name: validated.name,
-        description: validated.description || '',
-        price: validated.price,
-        stock: validated.stock,
-        sku: validated.sku || `SKU-${Date.now()}`,
-      },
-      select: {
-        id: true,
-        name: true,
-        description: true,
-        price: true,
-        stock: true,
-        sku: true,
-        createdAt: true,
-      },
-    });
+    // Create product with timestamps
+    const now = new Date();
+    const productData = {
+      name: validated.name,
+      description: validated.description || '',
+      price: validated.price,
+      stock: validated.stock,
+      sku: validated.sku || `SKU-${Date.now()}`,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const result = await productsCollection.insertOne(productData);
+
+    const product = {
+      id: result.insertedId.toString(),
+      name: productData.name,
+      description: productData.description,
+      price: productData.price,
+      stock: productData.stock,
+      sku: productData.sku,
+      createdAt: productData.createdAt,
+    };
 
     return sendSuccess(product, 'Product created successfully', 201);
   } catch (error) {

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getDb, ObjectId } from "@/lib/mongodb";
 
 export async function GET(req: Request) {
   try {
@@ -7,20 +7,25 @@ export async function GET(req: Request) {
     const userEmail = req.headers.get("x-user-email");
     const userRole = req.headers.get("x-user-role");
 
+    const db = await getDb();
+    
     // Get all users for admin dashboard
-    const users = await prisma.user.findMany({
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        createdAt: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    const users = await db.collection('users')
+      .find({}, { projection: { password: 0 } })
+      .sort({ createdAt: -1 })
+      .toArray();
+    
+    // Convert _id to id for response
+    const formattedUsers = users.map(user => ({
+      id: user._id.toString(),
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      createdAt: user.createdAt
+    }));
 
-    const userCount = await prisma.user.count();
-    const adminCount = await prisma.user.count({ where: { role: "ADMIN" } });
+    const userCount = await db.collection('users').countDocuments();
+    const adminCount = await db.collection('users').countDocuments({ role: "ADMIN" });
 
     return NextResponse.json({
       success: true,
@@ -33,7 +38,7 @@ export async function GET(req: Request) {
           adminUsers: adminCount,
           regularUsers: userCount - adminCount,
         },
-        users: users,
+        users: formattedUsers,
       }
     });
   } catch (error) {

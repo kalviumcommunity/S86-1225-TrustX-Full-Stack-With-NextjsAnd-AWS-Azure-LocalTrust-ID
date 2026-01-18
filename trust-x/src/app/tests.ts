@@ -1,28 +1,31 @@
 /**
  * COMPREHENSIVE TEST & PERFORMANCE BENCHMARK
- * Demonstrates all transaction, optimization, and monitoring features
+ * NOTE: This file is deprecated after MongoDB migration
+ * The old transaction and performance monitoring utilities have been removed
  */
 
-import { prisma } from '../lib/prisma';
-import {
-  processOrderTransaction,
-  createUserWithProjectsTransaction,
-  updateInventoryTransaction,
-  complexOrderTransaction,
-  testRollbackScenario,
-} from '../lib/transactions';
-import {
-  getOrdersInefficient,
-  getOrdersOptimized,
-  getOrderStatistics,
-} from '../lib/queryOptimization';
-import {
-  monitor,
-  generatePerformanceReport,
-  generateMockPerformanceData,
-  getDatabaseStatistics,
-  analyzeSlowQueries,
-} from '../lib/performanceMonitor';
+import { getDb } from '../lib/mongodb';
+
+// Commenting out removed imports
+// import {
+//   processOrderTransaction,
+//   createUserWithProjectsTransaction,
+//   updateInventoryTransaction,
+//   complexOrderTransaction,
+//   testRollbackScenario,
+// } from '../lib/transactions';
+// import {
+//   getOrdersInefficient,
+//   getOrdersOptimized,
+//   getOrderStatistics,
+// } from '../lib/queryOptimization';
+// import {
+//   monitor,
+//   generatePerformanceReport,
+//   generateMockPerformanceData,
+//   getDatabaseStatistics,
+//   analyzeSlowQueries,
+// } from '../lib/performanceMonitor';
 
 /**
  * MAIN TEST RUNNER
@@ -57,8 +60,6 @@ export async function runAllTests() {
     console.log('═'.repeat(80));
   } catch (error) {
     console.error('❌ Error during tests:', error);
-  } finally {
-    await prisma.$disconnect();
   }
 }
 
@@ -68,137 +69,155 @@ export async function runAllTests() {
 async function seedTestData(): Promise<void> {
   try {
     // Clear existing data
-    await prisma.payment.deleteMany({});
-    await prisma.orderItem.deleteMany({});
-    await prisma.order.deleteMany({});
-    await prisma.inventory.deleteMany({});
-    await prisma.product.deleteMany({});
-    await prisma.task.deleteMany({});
-    await prisma.project.deleteMany({});
-    await prisma.user.deleteMany({});
+    const db = await getDb();
+    await Promise.all([
+      db.collection('payments').deleteMany({}),
+      db.collection('orderItems').deleteMany({}),
+      db.collection('orders').deleteMany({}),
+      db.collection('inventory').deleteMany({}),
+      db.collection('products').deleteMany({}),
+      db.collection('tasks').deleteMany({}),
+      db.collection('projects').deleteMany({}),
+      db.collection('users').deleteMany({}),
+    ]);
 
     console.log('✓ Cleared existing data');
 
     // Create test users
-    const users = await prisma.user.createMany({
-      data: [
-        { name: 'Alice Johnson', email: 'alice@example.com', password: 'password123', role: 'USER' },
-        { name: 'Bob Smith', email: 'bob@example.com', password: 'password123', role: 'ADMIN' },
-        { name: 'Carol Davis', email: 'carol@example.com', password: 'password123', role: 'USER' },
-      ],
-    });
-    console.log(`✓ Created ${users.count} users`);
+    const now = new Date();
+    const usersResult = await db.collection('users').insertMany([
+      { name: 'Alice Johnson', email: 'alice@example.com', password: 'password123', role: 'USER', createdAt: now, updatedAt: now },
+      { name: 'Bob Smith', email: 'bob@example.com', password: 'password123', role: 'ADMIN', createdAt: now, updatedAt: now },
+      { name: 'Carol Davis', email: 'carol@example.com', password: 'password123', role: 'USER', createdAt: now, updatedAt: now },
+    ]);
+    console.log(`✓ Created ${Object.keys(usersResult.insertedIds).length} users`);
 
     // Get user IDs
-    const allUsers = await prisma.user.findMany({ select: { id: true } });
-    const userId = allUsers[0].id;
+    const allUsers = await db.collection('users').find({}, { projection: { _id: 1 } }).toArray();
+    const userId = allUsers[0]._id;
 
     // Create test projects
-    const projects = await prisma.project.createMany({
-      data: [
-        { title: 'Project Alpha', userId, status: 'active' },
-        { title: 'Project Beta', userId, status: 'active' },
-        { title: 'Project Gamma', userId, status: 'completed' },
-      ],
-    });
-    console.log(`✓ Created ${projects.count} projects`);
+    const projectsResult = await db.collection('projects').insertMany([
+      { title: 'Project Alpha', userId, status: 'active', createdAt: now, updatedAt: now },
+      { title: 'Project Beta', userId, status: 'active', createdAt: now, updatedAt: now },
+      { title: 'Project Gamma', userId, status: 'completed', createdAt: now, updatedAt: now },
+    ]);
+    console.log(`✓ Created ${Object.keys(projectsResult.insertedIds).length} projects`);
 
     // Create test tasks
-    const projectIds = await prisma.project.findMany({
-      where: { userId },
-      select: { id: true },
-    });
+    const projectIds = await db.collection('projects').find(
+      { userId },
+      { projection: { _id: 1 } }
+    ).toArray();
 
-    const tasks = await prisma.task.createMany({
-      data: [
-        {
-          title: 'Design Database Schema',
-          projectId: projectIds[0].id,
-          status: 'completed',
-          priority: 'high',
-        },
-        {
-          title: 'Implement API Endpoints',
-          projectId: projectIds[0].id,
-          status: 'in-progress',
-          priority: 'high',
-        },
-        {
-          title: 'Write Unit Tests',
-          projectId: projectIds[0].id,
-          status: 'pending',
-          priority: 'medium',
-        },
-        {
-          title: 'Frontend Development',
-          projectId: projectIds[1].id,
-          status: 'in-progress',
-          priority: 'high',
-        },
-        {
-          title: 'Deploy to Production',
-          projectId: projectIds[1].id,
-          status: 'pending',
-          priority: 'high',
-        },
-      ],
-    });
-    console.log(`✓ Created ${tasks.count} tasks`);
+    const tasksResult = await db.collection('tasks').insertMany([
+      {
+        title: 'Design Database Schema',
+        projectId: projectIds[0]._id,
+        status: 'completed',
+        priority: 'high',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        title: 'Implement API Endpoints',
+        projectId: projectIds[0]._id,
+        status: 'in-progress',
+        priority: 'high',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        title: 'Write Unit Tests',
+        projectId: projectIds[0]._id,
+        status: 'pending',
+        priority: 'medium',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        title: 'Frontend Development',
+        projectId: projectIds[1]._id,
+        status: 'in-progress',
+        priority: 'high',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        title: 'Deploy to Production',
+        projectId: projectIds[1]._id,
+        status: 'pending',
+        priority: 'high',
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    console.log(`✓ Created ${Object.keys(tasksResult.insertedIds).length} tasks`);
 
     // Create test products
-    const products = await prisma.product.createMany({
-      data: [
-        {
-          name: 'Laptop Pro',
-          description: 'High-performance laptop',
-          sku: 'LAPTOP-001',
-          price: 1299.99,
-          stock: 50,
-        },
-        {
-          name: 'Wireless Mouse',
-          description: 'Ergonomic wireless mouse',
-          sku: 'MOUSE-001',
-          price: 29.99,
-          stock: 200,
-        },
-        {
-          name: 'USB-C Cable',
-          description: 'High-speed USB-C cable',
-          sku: 'CABLE-001',
-          price: 12.99,
-          stock: 500,
-        },
-        {
-          name: 'Monitor 4K',
-          description: 'Ultra HD 4K monitor',
-          sku: 'MONITOR-001',
-          price: 399.99,
-          stock: 30,
-        },
-        {
-          name: 'Mechanical Keyboard',
-          description: 'RGB mechanical keyboard',
-          sku: 'KEYBOARD-001',
-          price: 149.99,
-          stock: 75,
-        },
-      ],
-    });
-    console.log(`✓ Created ${products.count} products`);
+    const productsResult = await db.collection('products').insertMany([
+      {
+        name: 'Laptop Pro',
+        description: 'High-performance laptop',
+        sku: 'LAPTOP-001',
+        price: 1299.99,
+        stock: 50,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        name: 'Wireless Mouse',
+        description: 'Ergonomic wireless mouse',
+        sku: 'MOUSE-001',
+        price: 29.99,
+        stock: 200,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        name: 'USB-C Cable',
+        description: 'High-speed USB-C cable',
+        sku: 'CABLE-001',
+        price: 12.99,
+        stock: 500,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        name: 'Monitor 4K',
+        description: 'Ultra HD 4K monitor',
+        sku: 'MONITOR-001',
+        price: 399.99,
+        stock: 30,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        name: 'Mechanical Keyboard',
+        description: 'RGB mechanical keyboard',
+        sku: 'KEYBOARD-001',
+        price: 149.99,
+        stock: 75,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    console.log(`✓ Created ${Object.keys(productsResult.insertedIds).length} products`);
 
     // Create test inventory
-    const allProducts = await prisma.product.findMany({ select: { id: true } });
-    const inventory = await prisma.inventory.createMany({
+    const allProducts = await db.collection('products').find({}, { projection: { _id: 1 } }).toArray();
+    const inventoryResult = await db.collection('inventory').insertMany(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      data: allProducts.map((p: any) => ({
-        productId: p.id,
+      allProducts.map((p: any) => ({
+        productId: p._id,
         warehouseLocation: 'Warehouse-A',
-        lastRestockDate: new Date(),
+        lastRestockDate: now,
         reorderLevel: 10,
-      })),
-    });
-    console.log(`✓ Created ${inventory.count} inventory records`);
+        createdAt: now,
+        updatedAt: now,
+      }))
+    );
+    console.log(`✓ Created ${Object.keys(inventoryResult.insertedIds).length} inventory records`);
 
     console.log('✅ Test data seeded successfully');
   } catch (error) {
@@ -212,8 +231,11 @@ async function seedTestData(): Promise<void> {
  */
 async function testTransactions(): Promise<void> {
   try {
-    const userId = (await prisma.user.findFirst({ select: { id: true } }))?.id;
-    const productId = (await prisma.product.findFirst({ select: { id: true } }))?.id;
+    const db = await getDb();
+    const user = await db.collection('users').findOne({}, { projection: { _id: 1 } });
+    const product = await db.collection('products').findOne({}, { projection: { _id: 1 } });
+    const userId = user?._id;
+    const productId = product?._id;
 
     if (!userId || !productId) {
       throw new Error('No user or product found for transaction test');
@@ -221,7 +243,8 @@ async function testTransactions(): Promise<void> {
 
     console.log('\n✨ Transaction 1: Process Order');
     console.log('─'.repeat(80));
-    const orderResult = await processOrderTransaction(userId, productId, 2);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const orderResult = await processOrderTransaction(userId as any, productId as any, 2);
     if (orderResult.success) {
       console.log(`Result: Order created in ${orderResult.duration}ms`);
     }
@@ -242,21 +265,23 @@ async function testTransactions(): Promise<void> {
 
     console.log('\n✨ Transaction 3: Update Inventory');
     console.log('─'.repeat(80));
-    const inventoryResult = await updateInventoryTransaction(productId, 100, 'Warehouse-B');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const inventoryResult = await updateInventoryTransaction(productId as any, 100, 'Warehouse-B');
     if (inventoryResult.success) {
       console.log(`Result: Inventory updated in ${inventoryResult.duration}ms`);
     }
 
     console.log('\n✨ Transaction 4: Complex Multi-Item Order');
     console.log('─'.repeat(80));
-    const products = await prisma.product.findMany({
-      select: { id: true },
-      take: 3,
-    });
+    const products = await db.collection('products')
+      .find({}, { projection: { _id: 1 } })
+      .limit(3)
+      .toArray();
     const complexOrder = await complexOrderTransaction(
-      userId,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      products.map((p: any) => ({ productId: p.id, quantity: 2 }))
+      userId as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      products.map((p: any) => ({ productId: p._id, quantity: 2 }))
     );
     if (complexOrder.success) {
       console.log(`Result: Complex order created in ${complexOrder.duration}ms`);
@@ -264,7 +289,8 @@ async function testTransactions(): Promise<void> {
 
     console.log('\n✨ Transaction 5: Rollback Test');
     console.log('─'.repeat(80));
-    const rollbackTest = await testRollbackScenario(userId, productId);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rollbackTest = await testRollbackScenario(userId as any, productId as any);
     console.log(
       `Rollback Verification: ${rollbackTest.rollbackVerified ? '✅ PASSED' : '❌ FAILED'}`
     );
@@ -278,7 +304,9 @@ async function testTransactions(): Promise<void> {
  */
 async function testQueryOptimization(): Promise<void> {
   try {
-    const userId = (await prisma.user.findFirst({ select: { id: true } }))?.id;
+    const db = await getDb();
+    const user = await db.collection('users').findOne({}, { projection: { _id: 1 } });
+    const userId = user?._id;
 
     if (!userId) {
       throw new Error('No user found for optimization test');
@@ -290,8 +318,10 @@ async function testQueryOptimization(): Promise<void> {
     // Test 1: Over-fetching vs Selective
     console.log('\n1️⃣  Over-fetching vs Selective Selection');
     console.log('...............................................................................');
-    const inefficientOrders = await getOrdersInefficient(userId);
-    const optimizedOrders = await getOrdersOptimized(userId);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const inefficientOrders = await getOrdersInefficient(userId as any);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const optimizedOrders = await getOrdersOptimized(userId as any);
     const orderImprovement =
       ((inefficientOrders.duration - optimizedOrders.duration) /
         inefficientOrders.duration) *
@@ -320,7 +350,8 @@ async function testQueryOptimization(): Promise<void> {
     // Test 5: Aggregation
     console.log('5️⃣  Aggregation & Statistics');
     console.log('...............................................................................');
-    const stats = await getOrderStatistics(userId);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const stats = await getOrderStatistics(userId as any);
     console.log(`Aggregation query: ${stats.duration}ms\n`);
 
     // Test 6: Batch operations
