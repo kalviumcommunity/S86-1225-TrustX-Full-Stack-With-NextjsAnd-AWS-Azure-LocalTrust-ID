@@ -90,7 +90,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '../../../lib/prisma';
+import { getDb } from '../../../lib/mongodb';
+import { ObjectId } from 'mongodb';
 import { requireResourcePermission } from '@/lib/rbac';
 import { sendSuccess, sendError } from '@/lib/responseHandler';
 
@@ -104,6 +105,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    const db = await getDb();
     const { searchParams } = new URL(req.url);
     const page = Math.max(1, Number(searchParams.get('page')) || 1);
     const limit = Math.min(100, Number(searchParams.get('limit')) || 10);
@@ -112,39 +114,56 @@ export async function GET(req: NextRequest) {
 
     const skip = (page - 1) * limit;
 
-    // Build where clause
+    // Build filter
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const whereClause: any = {};
-    if (status) whereClause.status = status;
-    if (userId) whereClause.userId = Number(userId);
+    const filter: any = {};
+    if (status) filter.status = status;
+    
+    // Handle userId with ObjectId conversion
+    if (userId) {
+      if (ObjectId.isValid(userId)) {
+        filter.userId = new ObjectId(userId);
+      } else {
+        return sendError('Invalid user ID format', 'VALIDATION_ERROR', 400);
+      }
+    }
     
     // Non-admins can only see their own projects
     if (context.role !== 'ADMIN') {
-      whereClause.userId = context.userId;
+      filter.userId = new ObjectId(context.userId);
     }
 
     // Fetch projects and total count
     const [projects, total] = await Promise.all([
-      prisma.project.findMany({
-        where: whereClause,
-        select: {
-          id: true,
-          title: true,
-          status: true,
-          userId: true,
-          createdAt: true,
-        },
-        skip,
-        take: limit,
-        orderBy: { createdAt: 'desc' },
-      }),
-      prisma.project.count({ where: whereClause }),
+      db.collection('projects')
+        .find(filter)
+        .project({
+          _id: 1,
+          title: 1,
+          status: 1,
+          userId: 1,
+          createdAt: 1,
+        })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .toArray(),
+      db.collection('projects').countDocuments(filter),
     ]);
+
+    // Transform _id to id for response
+    const formattedProjects = projects.map((project) => ({
+      id: project._id.toString(),
+      title: project.title,
+      status: project.status,
+      userId: project.userId.toString(),
+      createdAt: project.createdAt,
+    }));
 
     return NextResponse.json(
       {
         success: true,
-        data: projects,
+        data: formattedProjects,
         pagination: {
           page,
           limit,
@@ -171,6 +190,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    const db = await getDb();
     const body = await req.json();
     const { title, userId } = body;
 
@@ -180,10 +200,20 @@ export async function POST(req: NextRequest) {
     }
 
     // Use the authenticated user's ID
-    const projectUserId = userId ? Number(userId) : context.userId;
+    let projectUserId: ObjectId;
+    
+    if (userId) {
+      // Validate ObjectId format
+      if (!ObjectId.isValid(userId)) {
+        return sendError('Invalid user ID format', 'VALIDATION_ERROR', 400);
+      }
+      projectUserId = new ObjectId(userId);
+    } else {
+      projectUserId = new ObjectId(context.userId);
+    }
     
     // Only admins can create projects for other users
-    if (projectUserId !== context.userId && context.role !== 'ADMIN') {
+    if (projectUserId.toString() !== context.userId && context.role !== 'ADMIN') {
       return sendError(
         'Access denied: you can only create projects for yourself',
         'FORBIDDEN',
@@ -192,9 +222,9 @@ export async function POST(req: NextRequest) {
     }
 
     // Verify user exists (if creating for someone else)
-    if (projectUserId !== context.userId) {
-      const user = await prisma.user.findUnique({
-        where: { id: projectUserId },
+    if (projectUserId.toString() !== context.userId) {
+      const user = await db.collection('users').findOne({
+        _id: projectUserId,
       });
 
       if (!user) {
@@ -202,21 +232,25 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Create project
-    const project = await prisma.project.create({
-      data: {
-        title,
-        userId: projectUserId,
-        status: 'active',
-      },
-      select: {
-        id: true,
-        title: true,
-        status: true,
-        userId: true,
-        createdAt: true,
-      },
-    });
+    // Create project with timestamps
+    const now = new Date();
+    const newProject = {
+      title,
+      userId: projectUserId,
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const result = await db.collection('projects').insertOne(newProject);
+
+    const project = {
+      id: result.insertedId.toString(),
+      title: newProject.title,
+      status: newProject.status,
+      userId: newProject.userId.toString(),
+      createdAt: newProject.createdAt,
+    };
 
     return sendSuccess(project, 'Project created successfully', 201);
   } catch (error) {

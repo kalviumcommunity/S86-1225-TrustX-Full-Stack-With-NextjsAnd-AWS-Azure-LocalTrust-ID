@@ -1,7 +1,7 @@
 import { useUIContext } from "@/context/UIContext";
 
 export function useUI() {
-  const { theme, toggleTheme, sidebarOpen, toggleSidebar } = useUIContext();
+  const { theme, toggleTheme } = useUIContext();
 
-  return { theme, toggleTheme, sidebarOpen, toggleSidebar };
+  return { theme, toggleTheme };
 }

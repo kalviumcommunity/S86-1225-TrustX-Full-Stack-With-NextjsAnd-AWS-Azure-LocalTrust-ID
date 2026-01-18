@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getDb, ObjectId } from "@/lib/mongodb";
 import { handleError } from "@/lib/errorHandler";
 import { cacheService } from "@/lib/cache";
 
@@ -22,18 +22,26 @@ export async function PATCH(req: Request) {
       }, { status: 400 });
     }
 
+    const db = await getDb();
+    
     // Update user role
-    const updatedUser = await prisma.user.update({
-      where: { id: parseInt(userId) },
-      data: { role },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        updatedAt: true,
-      },
-    });
+    await db.collection('users').updateOne(
+      { _id: new ObjectId(userId) },
+      { $set: { role, updatedAt: new Date() } }
+    );
+    
+    const updatedUser = await db.collection('users').findOne(
+      { _id: new ObjectId(userId) },
+      { projection: { password: 0 } }
+    );
+    
+    const formattedUser = updatedUser ? {
+      id: updatedUser._id.toString(),
+      name: updatedUser.name,
+      email: updatedUser.email,
+      role: updatedUser.role,
+      updatedAt: updatedUser.updatedAt
+    } : null;
 
     // Invalidate all user list caches after updating a user
     const invalidatedCount = await cacheService.delPattern("users:list:*");
@@ -44,7 +52,7 @@ export async function PATCH(req: Request) {
     return NextResponse.json({
       success: true,
       message: `User role updated to ${role}`,
-      data: updatedUser
+      data: formattedUser
     });
   } catch (error) {
     return handleError(error, "PATCH /api/admin/users");

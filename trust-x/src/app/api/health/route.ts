@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { getDb } from '@/lib/mongodb';
 
 /**
  * Health Check Endpoint
@@ -70,10 +70,11 @@ export async function GET(req: Request) {
 
     // Database health check
     try {
-      await prisma.$queryRaw`SELECT 1`;
+      const db = await getDb();
+      await db.admin().ping();
       healthData.database = {
         status: 'connected',
-        type: 'sqlite',
+        type: 'mongodb',
       };
     } catch (dbError) {
       healthData.database = {
@@ -129,7 +130,8 @@ export async function POST(req: Request) {
     // Database check
     if (checkDatabase) {
       try {
-        const userCount = await prisma.user.count();
+        const db = await getDb();
+        const userCount = await db.collection('users').countDocuments();
         checks.checks.database = {
           status: 'pass',
           userCount,

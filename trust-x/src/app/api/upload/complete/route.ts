@@ -33,7 +33,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { fileExists } from '@/lib/storage';
 import { sendSuccess, sendError } from '@/lib/responseHandler';
 import { logger } from '@/lib/logger';
-import { prisma } from '@/lib/prisma';
+import { getDb, ObjectId } from '@/lib/mongodb';
 
 export async function POST(request: NextRequest) {
   try {
@@ -60,14 +60,26 @@ export async function POST(request: NextRequest) {
     }
 
     // Save file metadata to database
-    const file = await prisma.file.create({
-      data: {
-        name: fileName,
-        url: publicUrl,
-        size: fileSize,
-        type: fileType,
-      },
+    const db = await getDb();
+    const now = new Date();
+    const result = await db.collection('files').insertOne({
+      name: fileName,
+      url: publicUrl,
+      size: fileSize,
+      type: fileType,
+      createdAt: now,
+      updatedAt: now,
     });
+
+    const file = {
+      id: result.insertedId.toString(),
+      name: fileName,
+      url: publicUrl,
+      size: fileSize,
+      type: fileType,
+      createdAt: now,
+      updatedAt: now,
+    };
 
     logger.info('File upload completed', {
       fileId: file.id,
@@ -108,27 +120,33 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '20');
     const offset = parseInt(searchParams.get('offset') || '0');
 
-    const files = await prisma.file.findMany({
-      take: limit,
-      skip: offset,
-      orderBy: {
-        createdAt: 'desc',
-      },
-      select: {
-        id: true,
-        name: true,
-        url: true,
-        size: true,
-        type: true,
-        createdAt: true,
-      },
-    });
+    const db = await getDb();
+    const files = await db.collection('files')
+      .find({}, {
+        projection: {
+          _id: 1,
+          name: 1,
+          url: 1,
+          size: 1,
+          type: 1,
+          createdAt: 1,
+        },
+        sort: { createdAt: -1 },
+        limit: limit,
+        skip: offset,
+      })
+      .toArray();
 
-    const total = await prisma.file.count();
+    const total = await db.collection('files').countDocuments();
 
     // Map createdAt to uploadedAt for client compatibility
     const filesWithUploadedAt = files.map(file => ({
-      ...file,
+      id: file._id.toString(),
+      name: file.name,
+      url: file.url,
+      size: file.size,
+      type: file.type,
+      createdAt: file.createdAt,
       uploadedAt: file.createdAt,
     }));
 
@@ -167,8 +185,17 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Get file from database
-    const file = await prisma.file.findUnique({
-      where: { id: parseInt(fileId) },
+    const db = await getDb();
+    if (!ObjectId.isValid(fileId)) {
+      return sendError(
+        'Invalid file ID',
+        'VALIDATION_ERROR',
+        400
+      );
+    }
+
+    const file = await db.collection('files').findOne({
+      _id: new ObjectId(fileId),
     });
 
     if (!file) {
@@ -192,8 +219,8 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Delete from database
-    await prisma.file.delete({
-      where: { id: parseInt(fileId) },
+    await db.collection('files').deleteOne({
+      _id: new ObjectId(fileId),
     });
 
     logger.info('File deleted', {

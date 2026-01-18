@@ -27,7 +27,7 @@ const customJestConfig = {
   collectCoverageFrom: [
     'src/app/api/**/*.{js,ts}',
     'src/lib/**/*.{js,ts}',
-    '!src/lib/prisma.ts',
+    '!src/lib/mongodb.ts',
     '!src/**/*.test.{js,ts}',
     '!src/**/*.stories.{js,ts,jsx,tsx}',
   ],

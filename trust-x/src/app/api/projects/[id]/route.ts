@@ -6,7 +6,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '../../../../lib/prisma';
+import { getDb } from '../../../../lib/mongodb';
+import { ObjectId } from 'mongodb';
 
 type RouteParams = {
   params: Promise<{
@@ -20,25 +21,18 @@ export async function GET(
   { params }: RouteParams
 ) {
   try {
+    const db = await getDb();
     const { id } = await params;
-    const projectId = Number(id);
 
-    if (isNaN(projectId)) {
+    if (!ObjectId.isValid(id)) {
       return NextResponse.json(
         { success: false, error: 'Invalid project ID' },
         { status: 400 }
       );
     }
 
-    const project = await prisma.project.findUnique({
-      where: { id: projectId },
-      include: {
-        tasks: {
-          select: { id: true, title: true, status: true },
-          take: 10,
-        },
-      },
-    });
+    const projectId = new ObjectId(id);
+    const project = await db.collection('projects').findOne({ _id: projectId });
 
     if (!project) {
       return NextResponse.json(
@@ -47,8 +41,30 @@ export async function GET(
       );
     }
 
+    // Fetch related tasks (limit 10)
+    const tasks = await db.collection('tasks')
+      .find({ projectId: projectId })
+      .project({ _id: 1, title: 1, status: 1 })
+      .limit(10)
+      .toArray();
+
+    // Format response
+    const formattedProject = {
+      id: project._id.toString(),
+      title: project.title,
+      status: project.status,
+      userId: project.userId.toString(),
+      createdAt: project.createdAt,
+      updatedAt: project.updatedAt,
+      tasks: tasks.map((task) => ({
+        id: task._id.toString(),
+        title: task.title,
+        status: task.status,
+      })),
+    };
+
     return NextResponse.json(
-      { success: true, data: project },
+      { success: true, data: formattedProject },
       { status: 200 }
     );
   } catch (error) {
@@ -67,23 +83,22 @@ export async function PUT(
   { params }: RouteParams
 ) {
   try {
+    const db = await getDb();
     const { id } = await params;
-    const projectId = Number(id);
 
-    if (isNaN(projectId)) {
+    if (!ObjectId.isValid(id)) {
       return NextResponse.json(
         { success: false, error: 'Invalid project ID' },
         { status: 400 }
       );
     }
 
+    const projectId = new ObjectId(id);
     const body = await req.json();
     const { title, status } = body;
 
     // Check if project exists
-    const existingProject = await prisma.project.findUnique({
-      where: { id: projectId },
-    });
+    const existingProject = await db.collection('projects').findOne({ _id: projectId });
 
     if (!existingProject) {
       return NextResponse.json(
@@ -92,20 +107,34 @@ export async function PUT(
       );
     }
 
+    // Build update document
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const updateDoc: any = {
+      updatedAt: new Date(),
+    };
+    if (title) updateDoc.title = title;
+    if (status) updateDoc.status = status;
+
     // Update project
-    const updatedProject = await prisma.project.update({
-      where: { id: projectId },
-      data: {
-        ...(title && { title }),
-        ...(status && { status }),
-      },
-      select: {
-        id: true,
-        title: true,
-        status: true,
-        updatedAt: true,
-      },
-    });
+    const result = await db.collection('projects').findOneAndUpdate(
+      { _id: projectId },
+      { $set: updateDoc },
+      { returnDocument: 'after' }
+    );
+
+    if (!result) {
+      return NextResponse.json(
+        { success: false, error: 'Failed to update project' },
+        { status: 500 }
+      );
+    }
+
+    const updatedProject = {
+      id: result._id.toString(),
+      title: result.title,
+      status: result.status,
+      updatedAt: result.updatedAt,
+    };
 
     return NextResponse.json(
       {
@@ -131,20 +160,20 @@ export async function DELETE(
   { params }: RouteParams
 ) {
   try {
+    const db = await getDb();
     const { id } = await params;
-    const projectId = Number(id);
 
-    if (isNaN(projectId)) {
+    if (!ObjectId.isValid(id)) {
       return NextResponse.json(
         { success: false, error: 'Invalid project ID' },
         { status: 400 }
       );
     }
 
+    const projectId = new ObjectId(id);
+
     // Check if project exists
-    const project = await prisma.project.findUnique({
-      where: { id: projectId },
-    });
+    const project = await db.collection('projects').findOne({ _id: projectId });
 
     if (!project) {
       return NextResponse.json(
@@ -154,9 +183,7 @@ export async function DELETE(
     }
 
     // Delete project
-    await prisma.project.delete({
-      where: { id: projectId },
-    });
+    await db.collection('projects').deleteOne({ _id: projectId });
 
     return NextResponse.json(
       { success: true, message: 'Project deleted successfully' },

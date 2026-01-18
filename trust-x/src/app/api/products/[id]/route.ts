@@ -6,7 +6,7 @@
  */
 
 import { NextRequest } from 'next/server';
-import { prisma } from '../../../../lib/prisma';
+import { getDb, ObjectId } from '../../../../lib/mongodb';
 import { sendSuccess, sendError } from '../../../../lib/responseHandler';
 import { ERROR_CODES } from '../../../../lib/errorCodes';
 import { productUpdateSchema, ProductUpdateInput } from '../../../../lib/schemas/productSchema';
@@ -25,26 +25,41 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const productId = Number(id);
 
-    if (isNaN(productId)) {
+    if (!ObjectId.isValid(id)) {
       return sendError('Invalid product ID', ERROR_CODES.VALIDATION_ERROR, 400);
     }
 
-    const product = await prisma.product.findUnique({
-      where: { id: productId },
-      include: {
-        inventory: {
-          select: { id: true, warehouseLocation: true, reorderLevel: true },
-        },
-      },
-    });
+    const db = await getDb();
+    const productsCollection = db.collection('products');
+    const inventoryCollection = db.collection('inventory');
+
+    const product = await productsCollection.findOne({ _id: new ObjectId(id) });
 
     if (!product) {
       return sendError('Product not found', ERROR_CODES.NOT_FOUND, 404);
     }
 
-    return sendSuccess(product, 'Product fetched successfully', 200);
+    // Fetch inventory if exists
+    const inventory = await inventoryCollection.findOne({ productId: new ObjectId(id) });
+
+    const productResponse = {
+      id: product._id.toString(),
+      name: product.name,
+      description: product.description,
+      price: product.price,
+      stock: product.stock,
+      sku: product.sku,
+      createdAt: product.createdAt,
+      updatedAt: product.updatedAt,
+      inventory: inventory ? {
+        id: inventory._id.toString(),
+        warehouseLocation: inventory.warehouseLocation,
+        reorderLevel: inventory.reorderLevel,
+      } : null,
+    };
+
+    return sendSuccess(productResponse, 'Product fetched successfully', 200);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to fetch product';
     console.error('GET /api/products/[id] error:', error);
@@ -59,9 +74,8 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
-    const productId = Number(id);
 
-    if (isNaN(productId)) {
+    if (!ObjectId.isValid(id)) {
       return sendError('Invalid product ID', ERROR_CODES.VALIDATION_ERROR, 400);
     }
 
@@ -77,10 +91,11 @@ export async function PUT(
       throw err;
     }
 
+    const db = await getDb();
+    const productsCollection = db.collection('products');
+
     // Check if product exists
-    const existingProduct = await prisma.product.findUnique({
-      where: { id: productId },
-    });
+    const existingProduct = await productsCollection.findOne({ _id: new ObjectId(id) });
 
     if (!existingProduct) {
       return sendError('Product not found', ERROR_CODES.NOT_FOUND, 404);
@@ -88,34 +103,46 @@ export async function PUT(
 
     // If SKU is being updated, check uniqueness
     if (validated.sku && validated.sku !== existingProduct.sku) {
-      const skuExists = await prisma.product.findFirst({ where: { sku: validated.sku, id: { not: productId } } });
+      const skuExists = await productsCollection.findOne({ 
+        sku: validated.sku, 
+        _id: { $ne: new ObjectId(id) } 
+      });
       if (skuExists) {
         return sendError('SKU already exists', ERROR_CODES.VALIDATION_ERROR, 409);
       }
     }
 
-    // Update product
-    const updatedProduct = await prisma.product.update({
-      where: { id: productId },
-      data: {
-        ...(validated.name && { name: validated.name }),
-        ...(validated.description !== undefined && { description: validated.description }),
-        ...(validated.price !== undefined && { price: validated.price }),
-        ...(validated.stock !== undefined && { stock: validated.stock }),
-        ...(validated.sku && { sku: validated.sku }),
-      },
-      select: {
-        id: true,
-        name: true,
-        description: true,
-        price: true,
-        stock: true,
-        sku: true,
-        updatedAt: true,
-      },
-    });
+    // Build update object
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const updateData: any = {
+      updatedAt: new Date(),
+    };
 
-    return sendSuccess(updatedProduct, 'Product updated successfully', 200);
+    if (validated.name) updateData.name = validated.name;
+    if (validated.description !== undefined) updateData.description = validated.description;
+    if (validated.price !== undefined) updateData.price = validated.price;
+    if (validated.stock !== undefined) updateData.stock = validated.stock;
+    if (validated.sku) updateData.sku = validated.sku;
+
+    // Update product
+    await productsCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: updateData }
+    );
+
+    const updatedProduct = await productsCollection.findOne({ _id: new ObjectId(id) });
+
+    const productResponse = {
+      id: updatedProduct!._id.toString(),
+      name: updatedProduct!.name,
+      description: updatedProduct!.description,
+      price: updatedProduct!.price,
+      stock: updatedProduct!.stock,
+      sku: updatedProduct!.sku,
+      updatedAt: updatedProduct!.updatedAt,
+    };
+
+    return sendSuccess(productResponse, 'Product updated successfully', 200);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to update product';
     console.error('PUT /api/products/[id] error:', error);
@@ -130,25 +157,23 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const productId = Number(id);
 
-    if (isNaN(productId)) {
+    if (!ObjectId.isValid(id)) {
       return sendError('Invalid product ID', ERROR_CODES.VALIDATION_ERROR, 400);
     }
 
+    const db = await getDb();
+    const productsCollection = db.collection('products');
+
     // Check if product exists
-    const product = await prisma.product.findUnique({
-      where: { id: productId },
-    });
+    const product = await productsCollection.findOne({ _id: new ObjectId(id) });
 
     if (!product) {
       return sendError('Product not found', ERROR_CODES.NOT_FOUND, 404);
     }
 
     // Delete product
-    await prisma.product.delete({
-      where: { id: productId },
-    });
+    await productsCollection.deleteOne({ _id: new ObjectId(id) });
 
     return sendSuccess(null, 'Product deleted successfully', 200);
   } catch (error) {

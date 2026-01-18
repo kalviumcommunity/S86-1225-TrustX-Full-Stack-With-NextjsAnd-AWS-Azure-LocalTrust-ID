@@ -29,19 +29,26 @@ export default function SettingsPage() {
       const response = await fetch('/api/auth/me');
       if (response.ok) {
         const data = await response.json();
-        setUser(data.user);
-        setFormData({
-          ...formData,
-          name: data.user.name || '',
-          email: data.user.email || ''
-        });
+        // API returns data.data.user, not data.user
+        const userData = data?.data?.user;
+        if (userData) {
+          setUser(userData);
+          setFormData({
+            ...formData,
+            name: userData.name || '',
+            email: userData.email || ''
+          });
+        } else {
+          throw new Error('User data not found in response');
+        }
       } else {
-        router.push('/login');
+        router.push('/login?redirect=/settings');
       }
     } catch (error) {
       console.error('Failed to fetch user profile:', error);
       setMessage('Failed to load profile');
       setMessageType('error');
+      router.push('/login?redirect=/settings');
     } finally {
       setLoading(false);
     }

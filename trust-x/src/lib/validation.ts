@@ -14,22 +14,22 @@ import { sanitizeStrict, sanitizeBasic, sanitizeEmail, sanitizeUrl } from './san
 
 export const userRegistrationSchema = z.object({
   name: z.string()
-    .min(2, 'Name must be at least 2 characters')
+    .min(2, 'Name must be at least 2 characters long')
     .max(100, 'Name must be less than 100 characters')
     .transform((val) => sanitizeStrict(val)),
   
   email: z.string()
-    .min(5, 'Email must be at least 5 characters')
+    .min(5, 'Email is required and must be at least 5 characters')
     .max(255, 'Email must be less than 255 characters')
-    .email('Invalid email format')
+    .email('Please enter a valid email address (e.g., user@example.com)')
     .transform((val) => sanitizeEmail(val)),
   
   password: z.string()
-    .min(8, 'Password must be at least 8 characters')
+    .min(8, 'Password must be at least 8 characters long')
     .max(128, 'Password must be less than 128 characters')
-    .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
-    .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
-    .regex(/[0-9]/, 'Password must contain at least one number'),
+    .regex(/[A-Z]/, 'Password must include at least one uppercase letter (A-Z)')
+    .regex(/[a-z]/, 'Password must include at least one lowercase letter (a-z)')
+    .regex(/[0-9]/, 'Password must include at least one number (0-9)'),
   
   role: z.enum(['ADMIN', 'EDITOR', 'USER', 'VIEWER']).optional(),
 });

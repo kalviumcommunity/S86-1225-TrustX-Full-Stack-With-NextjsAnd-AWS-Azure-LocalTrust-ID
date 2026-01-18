@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcrypt";
-import { prisma } from "../../../../lib/prisma";
+import { getDb, ObjectId } from "../../../../lib/mongodb";
 import { generateAccessToken, generateRefreshToken } from "../../../../lib/jwt";
 import { logger } from "../../../../lib/logger";
 import { createRequestContext, logRequestCompletion } from "../../../../lib/requestLogger";
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   const context = createRequestContext(req);
@@ -17,7 +20,8 @@ export async function POST(req: NextRequest) {
     });
 
     // Find user
-    const user = await prisma.user.findUnique({ where: { email } });
+    const db = await getDb();
+    const user = await db.collection('users').findOne({ email });
     if (!user) {
       logger.logAuth('login_failed', undefined, false, context.requestId);
       logger.warn('Login failed - user not found', {

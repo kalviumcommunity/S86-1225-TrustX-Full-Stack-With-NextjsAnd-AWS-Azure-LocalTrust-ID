@@ -6,7 +6,7 @@
 import { NextRequest } from 'next/server';
 import { requireRole } from '@/lib/rbac';
 import { sendSuccess, sendError } from '@/lib/responseHandler';
-import { prisma } from '@/lib/prisma';
+import { getDb, ObjectId } from '@/lib/mongodb';
 
 export async function DELETE(
   req: NextRequest,
@@ -22,15 +22,16 @@ export async function DELETE(
 
   try {
     const { id } = await params;
-    const userId = parseInt(id);
+    const db = await getDb();
 
-    if (isNaN(userId)) {
+    // Validate ObjectId
+    if (!ObjectId.isValid(id)) {
       return sendError('Invalid user ID', 'VALIDATION_ERROR', 400);
     }
 
     // Check if user exists
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
+    const user = await db.collection('users').findOne({
+      _id: new ObjectId(id)
     });
 
     if (!user) {
@@ -38,17 +39,17 @@ export async function DELETE(
     }
 
     // Prevent self-deletion
-    if (user.id === context.userId) {
+    if (user._id.toString() === context.userId) {
       return sendError('Cannot delete your own account', 'INVALID_OPERATION', 400);
     }
 
     // Delete user
-    await prisma.user.delete({
-      where: { id: userId },
+    await db.collection('users').deleteOne({
+      _id: new ObjectId(id)
     });
 
     return sendSuccess(
-      { id: userId },
+      { id },
       'User deleted successfully',
       200
     );

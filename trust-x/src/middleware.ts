@@ -117,13 +117,8 @@ export function middleware(req: NextRequest) {
   }
 
   // Protect client-side pages using cookie-based access token
-  if (pathname.startsWith("/dashboard") || pathname.startsWith("/users")) {
+  if (pathname.startsWith("/dashboard") || pathname.startsWith("/users") || pathname.startsWith("/businesses/dashboard")) {
     const accessToken = req.cookies.get("accessToken")?.value;
-    
-    // Debug logging
-    console.log('Middleware - Path:', pathname);
-    console.log('Middleware - All cookies:', req.cookies.getAll());
-    console.log('Middleware - Access token:', accessToken ? 'Present' : 'Missing');
 
     if (!accessToken) {
       const loginUrl = new URL("/login", req.url);
@@ -132,7 +127,33 @@ export function middleware(req: NextRequest) {
     }
 
     try {
-      verifyAccessToken(accessToken);
+      const decoded = verifyAccessToken(accessToken);
+      
+      // Enforce role-based access control for specific dashboard routes
+      // Admin dashboard - only ADMIN role
+      if (pathname.startsWith("/dashboard/admin")) {
+        if (decoded.role !== "ADMIN") {
+          // Non-admin trying to access admin dashboard - redirect to their dashboard
+          return NextResponse.redirect(new URL("/dashboard", req.url));
+        }
+      }
+      
+      // Business dashboard - NOT for ADMIN role (admins use their own dashboard)
+      if (pathname.startsWith("/businesses/dashboard")) {
+        if (decoded.role === "ADMIN") {
+          // Admin trying to access business dashboard - redirect to admin dashboard
+          return NextResponse.redirect(new URL("/dashboard/admin", req.url));
+        }
+      }
+
+      // Regular user dashboard - NOT for ADMIN role
+      if (pathname === "/dashboard" || pathname.startsWith("/dashboard?")) {
+        if (decoded.role === "ADMIN") {
+          // Admin trying to access regular dashboard - redirect to admin dashboard
+          return NextResponse.redirect(new URL("/dashboard/admin", req.url));
+        }
+      }
+
       return response;
     } catch (error) {
       // Token expired - redirect to login with hint to refresh

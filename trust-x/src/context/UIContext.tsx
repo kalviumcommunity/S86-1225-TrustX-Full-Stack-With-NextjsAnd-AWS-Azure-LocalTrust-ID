@@ -6,15 +6,12 @@ type Theme = "light" | "dark";
 interface UIContextType {
   theme: Theme;
   toggleTheme: () => void;
-  sidebarOpen: boolean;
-  toggleSidebar: () => void;
 }
 
 const UIContext = createContext<UIContextType | undefined>(undefined);
 
 export function UIProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>("light");
-  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -34,16 +31,8 @@ export function UIProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  const toggleSidebar = () => {
-    setSidebarOpen((p) => {
-      const next = !p;
-      console.log(next ? "Sidebar opened" : "Sidebar closed");
-      return next;
-    });
-  };
-
   return (
-    <UIContext.Provider value={{ theme, toggleTheme, sidebarOpen, toggleSidebar }}>{children}</UIContext.Provider>
+    <UIContext.Provider value={{ theme, toggleTheme }}>{children}</UIContext.Provider>
   );
 }
 
