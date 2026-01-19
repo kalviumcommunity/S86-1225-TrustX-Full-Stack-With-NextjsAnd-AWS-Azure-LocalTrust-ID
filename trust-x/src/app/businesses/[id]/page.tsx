@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { use, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
@@ -41,8 +41,11 @@ interface Review {
   createdAt: string;
 }
 
-export default function BusinessDetailPage({ params }: { params: { id: string } }) {
+export default function BusinessDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
+  const resolvedParams = use(params);
+  const businessId = resolvedParams.id;
+  
   const [business, setBusiness] = useState<Business | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,15 +60,18 @@ export default function BusinessDetailPage({ params }: { params: { id: string } 
   useEffect(() => {
     fetchBusiness();
     fetchReviews();
-  }, [params.id]);
+  }, [businessId]);
 
   const fetchBusiness = async () => {
     try {
-      const response = await fetch(`/api/businesses/${params.id}`);
+      const response = await fetch(`/api/businesses/${businessId}`);
       const data = await response.json();
+      console.log('[Business Detail] Business data:', data);
 
       if (response.ok) {
-        setBusiness(data.data.business);
+        const businessData = data.data.business;
+        console.log('[Business Detail] Setting business:', businessData);
+        setBusiness(businessData);
       } else {
         setError(data.error?.message || 'Business not found');
       }
@@ -78,11 +84,14 @@ export default function BusinessDetailPage({ params }: { params: { id: string } 
 
   const fetchReviews = async () => {
     try {
-      const response = await fetch(`/api/businesses/${params.id}/reviews`);
+      const response = await fetch(`/api/businesses/${businessId}/reviews`);
       const data = await response.json();
+      console.log('[Business Detail] Reviews data:', data);
 
       if (response.ok) {
-        setReviews(data.data.reviews);
+        const reviewsData = data.data.reviews || [];
+        console.log('[Business Detail] Setting reviews:', reviewsData);
+        setReviews(reviewsData);
       }
     } catch (err) {
       console.error('Failed to fetch reviews:', err);
@@ -94,22 +103,23 @@ export default function BusinessDetailPage({ params }: { params: { id: string } 
     setSubmitting(true);
 
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        router.push(`/login?redirect=/businesses/${params.id}`);
-        return;
-      }
-
-      const response = await fetch(`/api/businesses/${params.id}/reviews`, {
+      const response = await fetch(`/api/businesses/${businessId}/reviews`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({ rating, comment })
       });
 
       const data = await response.json();
+
+      if (response.status === 401) {
+        alert('Your session has expired. Redirecting to login...');
+        setTimeout(() => {
+          router.push(`/login?redirect=/businesses/${businessId}&expired=true`);
+        }, 1500);
+        return;
+      }
 
       if (response.ok) {
         setShowReviewForm(false);

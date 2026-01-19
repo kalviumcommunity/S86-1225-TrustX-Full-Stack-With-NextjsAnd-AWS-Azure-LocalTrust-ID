@@ -18,12 +18,13 @@
  */
 
 import { NextResponse } from 'next/server';
-import { 
-  checkDatabaseHealth, 
-  getDatabaseInfo, 
-  testDatabaseConnection 
-} from '@/lib/db';
+// import { 
+//   checkDatabaseHealth, 
+//   getDatabaseInfo, 
+//   testDatabaseConnection 
+// } from '@/lib/db'; // TODO: Implement db utility functions
 import { logger } from '@/lib/logger';
+import { getDb } from '@/lib/mongodb';
 
 /**
  * GET /api/health/db
@@ -38,8 +39,11 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const detailed = searchParams.get('detailed') === 'true';
     
-    // Quick health check
-    const isHealthy = await checkDatabaseHealth();
+    // Quick health check using MongoDB connection
+    const db = await getDb();
+    const adminDb = db.admin();
+    const ping = await adminDb.ping();
+    const isHealthy = ping.ok === 1;
     
     if (!isHealthy) {
       logger.error('Database health check failed');
@@ -65,19 +69,18 @@ export async function GET(request: Request) {
     
     // Add detailed information if requested
     if (detailed) {
-      const dbInfo = await getDatabaseInfo();
-      response.details = {
-        provider: dbInfo.provider,
-        version: dbInfo.version,
-        database: dbInfo.currentDatabase,
-        connections: {
-          current: dbInfo.connectionCount,
-          max: dbInfo.maxConnections,
-          usage: dbInfo.maxConnections 
-            ? `${((dbInfo.connectionCount || 0) / dbInfo.maxConnections * 100).toFixed(1)}%`
-            : 'N/A',
-        },
-      };
+      try {
+        const stats = await db.stats();
+        response.details = {
+          provider: 'MongoDB',
+          database: db.databaseName,
+          collections: stats.collections || 0,
+          dataSize: `${((stats.dataSize || 0) / 1024 / 1024).toFixed(2)} MB`,
+          storageSize: `${((stats.storageSize || 0) / 1024 / 1024).toFixed(2)} MB`,
+        };
+      } catch (detailError) {
+        logger.warn('Could not fetch detailed database info', { error: detailError });
+      }
     }
     
     logger.info('Database health check passed', {
@@ -106,17 +109,18 @@ export async function GET(request: Request) {
  * POST /api/health/db
  * 
  * Performs a comprehensive database connection test
- * Requires authentication for security
  */
-export async function POST(request: Request) {
+export async function POST() {
   try {
-    // Optional: Add authentication here
-    // const isAuthorized = await verifyAdminAccess(request);
-    // if (!isAuthorized) {
-    //   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    // }
+    const db = await getDb();
+    const adminDb = db.admin();
+    const ping = await adminDb.ping();
     
-    const result = await testDatabaseConnection();
+    const result = {
+      success: ping.ok === 1,
+      message: ping.ok === 1 ? 'Database connection successful' : 'Database connection failed',
+      timestamp: new Date().toISOString(),
+    };
     
     return NextResponse.json(
       result,

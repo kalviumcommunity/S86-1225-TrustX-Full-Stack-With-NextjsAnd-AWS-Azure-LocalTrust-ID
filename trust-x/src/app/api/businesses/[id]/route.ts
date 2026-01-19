@@ -47,17 +47,18 @@ import { sendSuccess, sendError } from '@/lib/responseHandler';
 // GET /api/businesses/[id] - Get business details
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const resolvedParams = await params;
     const db = await getDb();
     
-    if (!ObjectId.isValid(params.id)) {
+    if (!ObjectId.isValid(resolvedParams.id)) {
       return sendError('Invalid business ID', 'INVALID_ID', 400);
     }
 
     const business = await db.collection('businesses').findOne({
-      _id: new ObjectId(params.id),
+      _id: new ObjectId(resolvedParams.id),
       status: 'active'
     });
 
@@ -67,7 +68,7 @@ export async function GET(
 
     // Increment view count
     await db.collection('businesses').updateOne(
-      { _id: new ObjectId(params.id) },
+      { _id: new ObjectId(resolvedParams.id) },
       { $inc: { totalViews: 1 } }
     );
 
@@ -115,7 +116,7 @@ export async function GET(
 // PUT /api/businesses/[id] - Update business profile
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const context = requireAuth(req);
   
@@ -124,14 +125,15 @@ export async function PUT(
   }
 
   try {
+    const resolvedParams = await params;
     const db = await getDb();
     
-    if (!ObjectId.isValid(params.id)) {
+    if (!ObjectId.isValid(resolvedParams.id)) {
       return sendError('Invalid business ID', 'INVALID_ID', 400);
     }
 
     const business = await db.collection('businesses').findOne({
-      _id: new ObjectId(params.id)
+      _id: new ObjectId(resolvedParams.id)
     });
 
     if (!business) {
@@ -162,7 +164,7 @@ export async function PUT(
     if (body.socialLinks) updateFields.socialLinks = body.socialLinks;
 
     const result = await db.collection('businesses').updateOne(
-      { _id: new ObjectId(params.id) },
+      { _id: new ObjectId(resolvedParams.id) },
       { $set: updateFields }
     );
 
@@ -171,7 +173,7 @@ export async function PUT(
     }
 
     const updatedBusiness = await db.collection('businesses').findOne({
-      _id: new ObjectId(params.id)
+      _id: new ObjectId(resolvedParams.id)
     });
 
     return sendSuccess(
@@ -192,7 +194,7 @@ export async function PUT(
 // DELETE /api/businesses/[id] - Soft delete business
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const context = requireAuth(req);
   
@@ -201,14 +203,15 @@ export async function DELETE(
   }
 
   try {
+    const resolvedParams = await params;
     const db = await getDb();
     
-    if (!ObjectId.isValid(params.id)) {
+    if (!ObjectId.isValid(resolvedParams.id)) {
       return sendError('Invalid business ID', 'INVALID_ID', 400);
     }
 
     const business = await db.collection('businesses').findOne({
-      _id: new ObjectId(params.id)
+      _id: new ObjectId(resolvedParams.id)
     });
 
     if (!business) {
@@ -222,7 +225,7 @@ export async function DELETE(
 
     // Soft delete - set status to 'deleted'
     await db.collection('businesses').updateOne(
-      { _id: new ObjectId(params.id) },
+      { _id: new ObjectId(resolvedParams.id) },
       { 
         $set: { 
           status: 'deleted',

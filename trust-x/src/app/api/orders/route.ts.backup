@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, ObjectId } from '../../../lib/mongodb';
-import { processOrderTransaction } from '../../../lib/transactions';
+// import { processOrderTransaction } from '../../../lib/transactions'; // TODO: Implement transactions
 
 // GET: Retrieve all orders with pagination and filtering
 export async function GET(req: NextRequest) {

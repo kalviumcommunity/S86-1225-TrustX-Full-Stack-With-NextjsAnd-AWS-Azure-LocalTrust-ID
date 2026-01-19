@@ -44,6 +44,7 @@
     "@types/dompurify": "^3.0.5",
     "@types/sanitize-html": "^2.16.0",
     "bcrypt": "^6.0.0",
+    "bcryptjs": "^3.0.3",
     "dompurify": "^3.3.1",
     "ioredis": "^5.8.2",
     "isomorphic-dompurify": "^2.35.0",

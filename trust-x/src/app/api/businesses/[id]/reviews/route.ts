@@ -49,12 +49,13 @@ import { sendSuccess, sendError } from '@/lib/responseHandler';
 // GET /api/businesses/[id]/reviews - Get all reviews
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const resolvedParams = await params;
     const db = await getDb();
     
-    if (!ObjectId.isValid(params.id)) {
+    if (!ObjectId.isValid(resolvedParams.id)) {
       return sendError('Invalid business ID', 'INVALID_ID', 400);
     }
 
@@ -68,7 +69,7 @@ export async function GET(
       .aggregate([
         {
           $match: {
-            businessId: new ObjectId(params.id),
+            businessId: new ObjectId(resolvedParams.id),
             status: 'active'
           }
         },
@@ -100,7 +101,7 @@ export async function GET(
       .toArray();
 
     const total = await db.collection('reviews').countDocuments({
-      businessId: new ObjectId(params.id),
+      businessId: new ObjectId(resolvedParams.id),
       status: 'active'
     });
 
@@ -134,7 +135,7 @@ export async function GET(
 // POST /api/businesses/[id]/reviews - Add a review
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const context = requireAuth(req);
   
@@ -143,9 +144,10 @@ export async function POST(
   }
 
   try {
+    const resolvedParams = await params;
     const db = await getDb();
     
-    if (!ObjectId.isValid(params.id)) {
+    if (!ObjectId.isValid(resolvedParams.id)) {
       return sendError('Invalid business ID', 'INVALID_ID', 400);
     }
 
@@ -163,7 +165,7 @@ export async function POST(
 
     // Check if business exists
     const business = await db.collection('businesses').findOne({
-      _id: new ObjectId(params.id),
+      _id: new ObjectId(resolvedParams.id),
       status: 'active'
     });
 
@@ -173,7 +175,7 @@ export async function POST(
 
     // Check if user already reviewed
     const existingReview = await db.collection('reviews').findOne({
-      businessId: new ObjectId(params.id),
+      businessId: new ObjectId(resolvedParams.id),
       userId: new ObjectId(context.userId)
     });
 
@@ -184,7 +186,7 @@ export async function POST(
     // Create review
     const now = new Date();
     const reviewData = {
-      businessId: new ObjectId(params.id),
+      businessId: new ObjectId(resolvedParams.id),
       userId: new ObjectId(context.userId),
       rating,
       comment,
@@ -197,14 +199,14 @@ export async function POST(
 
     // Update business stats
     const allReviews = await db.collection('reviews')
-      .find({ businessId: new ObjectId(params.id), status: 'active' })
+      .find({ businessId: new ObjectId(resolvedParams.id), status: 'active' })
       .toArray();
 
     const totalRating = allReviews.reduce((sum, r) => sum + r.rating, 0);
     const averageRating = totalRating / allReviews.length;
 
     await db.collection('businesses').updateOne(
-      { _id: new ObjectId(params.id) },
+      { _id: new ObjectId(resolvedParams.id) },
       {
         $set: {
           reviewCount: allReviews.length,
@@ -215,7 +217,7 @@ export async function POST(
     );
 
     // Recalculate trust score
-    await recalculateTrustScore(params.id, db);
+    await recalculateTrustScore(resolvedParams.id, db);
 
     const review = {
       id: result.insertedId.toString(),

@@ -132,7 +132,7 @@ export async function GET(req: NextRequest) {
   const accessToken = req.cookies.get('accessToken')?.value;
   
   if (!accessToken) {
-    return sendError('Unauthorized - Please login', 401, context.requestId);
+    return sendError('Unauthorized - Please login', 'UNAUTHORIZED', 401);
   }
 
   try {

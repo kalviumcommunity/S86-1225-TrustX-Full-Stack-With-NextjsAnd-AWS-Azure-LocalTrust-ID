@@ -47,17 +47,11 @@ export default function RegisterBusinessPage() {
     };
 
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        router.push('/login?redirect=/businesses/register');
-        return;
-      }
-
+      // Cookies are automatically sent with fetch
       const response = await fetch('/api/businesses', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify(data)
       });
@@ -68,6 +62,12 @@ export default function RegisterBusinessPage() {
         setSuccess(true);
         setTimeout(() => {
           router.push(`/businesses/${result.data.business.id}`);
+        }, 2000);
+      } else if (response.status === 401) {
+        // Token expired or not authenticated - redirect to login
+        setError('Your session has expired. Redirecting to login...');
+        setTimeout(() => {
+          router.push('/login?redirect=/businesses/register&expired=true');
         }, 2000);
       } else {
         setError(result.error?.message || 'Failed to register business');
