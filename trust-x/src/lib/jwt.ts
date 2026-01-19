@@ -18,7 +18,7 @@ const REFRESH_TOKEN_EXPIRY = '7d'; // 7 days
  */
 
 export interface TokenPayload {
-  id: number;
+  id: string;
   email: string;
   role: string;
 }

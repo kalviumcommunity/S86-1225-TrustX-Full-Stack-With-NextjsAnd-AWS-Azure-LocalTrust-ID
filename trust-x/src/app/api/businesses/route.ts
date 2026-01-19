@@ -74,6 +74,7 @@ import { sendSuccess, sendError } from '@/lib/responseHandler';
 // GET /api/businesses - List all businesses with filters
 export async function GET(req: NextRequest) {
   try {
+    console.log('[API] GET /api/businesses - Starting request');
     const { searchParams } = new URL(req.url);
     const search = searchParams.get('search');
     const category = searchParams.get('category');
@@ -84,7 +85,9 @@ export async function GET(req: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '20');
     const skip = (page - 1) * limit;
 
+    console.log('[API] Connecting to database...');
     const db = await getDb();
+    console.log('[API] Database connected successfully');
     
     // Build query filter
     const query: Record<string, unknown> = { status: 'active' };
@@ -125,6 +128,7 @@ export async function GET(req: NextRequest) {
     // Format response
     const formattedBusinesses = businesses.map(business => ({
       id: business._id.toString(),
+      ownerId: business.ownerId?.toString() || null,
       name: business.name,
       category: business.category,
       description: business.description,
@@ -151,8 +155,14 @@ export async function GET(req: NextRequest) {
       }
     }, 'Businesses retrieved successfully');
   } catch (error) {
-    console.error('Error fetching businesses:', error);
-    return sendError('Failed to fetch businesses', 'INTERNAL_ERROR', 500);
+    console.error('[API] Error fetching businesses:', error);
+    console.error('[API] Error details:', error instanceof Error ? error.message : 'Unknown error');
+    console.error('[API] Stack trace:', error instanceof Error ? error.stack : 'No stack trace');
+    return sendError(
+      `Failed to fetch businesses: ${error instanceof Error ? error.message : 'Unknown error'}`, 
+      'INTERNAL_ERROR', 
+      500
+    );
   }
 }
 

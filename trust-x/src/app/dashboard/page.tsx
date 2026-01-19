@@ -65,32 +65,34 @@ export default function UserDashboard() {
       // Regular users stay on this dashboard
 
       // Fetch user's reviews
+      let userReviews: Review[] = [];
       const reviewsRes = await fetch('/api/reviews');
       if (reviewsRes.ok) {
         const reviewsData = await reviewsRes.json();
-        const userReviews = reviewsData.data.reviews.filter((r: any) => r.userId === userData.id);
+        userReviews = reviewsData.data.reviews.filter((r: any) => r.userId === userData.id);
         setMyReviews(userReviews);
       }
 
       // Fetch user's business if they have one
+      let userBusiness: Business | null = null;
       const businessRes = await fetch('/api/businesses');
       if (businessRes.ok) {
         const businessData = await businessRes.json();
-        const userBusiness = businessData.data.businesses.find((b: any) => b.ownerId === userData.id);
+        userBusiness = businessData.data.businesses.find((b: any) => b.ownerId === userData.id);
         if (userBusiness) {
           setMyBusiness(userBusiness);
         }
       }
 
-      // Calculate stats
-      const avgRating = myReviews.length > 0
-        ? myReviews.reduce((sum, r) => sum + r.rating, 0) / myReviews.length
+      // Calculate stats from the fetched data
+      const avgRating = userReviews.length > 0
+        ? userReviews.reduce((sum, r) => sum + r.rating, 0) / userReviews.length
         : 0;
 
       setStats({
-        totalReviews: myReviews.length,
-        totalBusinesses: myBusiness ? 1 : 0,
-        averageRating: avgRating,
+        totalReviews: userReviews.length,
+        totalBusinesses: userBusiness ? 1 : 0,
+        averageRating: parseFloat(avgRating.toFixed(1)),
         recentActivity: []
       });
 

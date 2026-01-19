@@ -36,7 +36,7 @@ import { sendSuccess, sendError } from '@/lib/responseHandler';
 // POST /api/businesses/[id]/verify - Add verification
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const context = requireAuth(req);
   
@@ -45,14 +45,15 @@ export async function POST(
   }
 
   try {
+    const resolvedParams = await params;
     const db = await getDb();
     
-    if (!ObjectId.isValid(params.id)) {
+    if (!ObjectId.isValid(resolvedParams.id)) {
       return sendError('Invalid business ID', 'INVALID_ID', 400);
     }
 
     const business = await db.collection('businesses').findOne({
-      _id: new ObjectId(params.id)
+      _id: new ObjectId(resolvedParams.id)
     });
 
     if (!business) {
@@ -60,7 +61,7 @@ export async function POST(
     }
 
     // Check if user is the owner or admin
-    if (business.ownerId.toString() !== context.userId && context.role !== 'ADMIN') {
+    if (business.ownerId?.toString() !== context.userId.toString() && context.role !== 'ADMIN') {
       return sendError('Not authorized to verify this business', 'FORBIDDEN', 403);
     }
 
@@ -128,12 +129,12 @@ export async function POST(
     }
 
     await db.collection('businesses').updateOne(
-      { _id: new ObjectId(params.id) },
+      { _id: new ObjectId(resolvedParams.id) },
       updateData
     );
 
     // Recalculate trust score
-    await recalculateTrustScore(params.id, db);
+    await recalculateTrustScore(resolvedParams.id, db);
 
     return sendSuccess(
       {
@@ -153,17 +154,18 @@ export async function POST(
 // GET /api/businesses/[id]/verify - Get verification status
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const resolvedParams = await params;
     const db = await getDb();
     
-    if (!ObjectId.isValid(params.id)) {
+    if (!ObjectId.isValid(resolvedParams.id)) {
       return sendError('Invalid business ID', 'INVALID_ID', 400);
     }
 
     const business = await db.collection('businesses').findOne(
-      { _id: new ObjectId(params.id) },
+      { _id: new ObjectId(resolvedParams.id) },
       {
         projection: {
           isVerified: 1,

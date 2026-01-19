@@ -17,7 +17,7 @@ import {
 } from '@/config/roles';
 
 export interface RBACContext {
-  userId: number;
+  userId: string;
   email: string;
   role: Role;
   ip?: string;
@@ -35,18 +35,24 @@ export function getUserContext(req: NextRequest): RBACContext | null {
     return null;
   }
 
-  const payload = verifyAccessToken(token);
-  if (!payload) {
+  try {
+    const payload = verifyAccessToken(token);
+    if (!payload) {
+      return null;
+    }
+
+    return {
+      userId: payload.id,
+      email: payload.email,
+      role: payload.role as Role,
+      ip: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown',
+      userAgent: req.headers.get('user-agent') || 'unknown',
+    };
+  } catch (error) {
+    // Token expired or invalid - return null to trigger authentication error
+    console.log('[RBAC] Token verification failed:', error instanceof Error ? error.message : 'Unknown error');
     return null;
   }
-
-  return {
-    userId: payload.id,
-    email: payload.email,
-    role: payload.role as Role,
-    ip: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown',
-    userAgent: req.headers.get('user-agent') || 'unknown',
-  };
 }
 
 /**
@@ -56,7 +62,7 @@ interface RBACLogEntry {
   timestamp: string;
   action: string;
   resource: string;
-  userId: number;
+  userId: string;
   email: string;
   role: Role;
   permission: Permission | string;
@@ -108,7 +114,7 @@ export function requireAuth(req: NextRequest): RBACContext | NextResponse {
   const context = getUserContext(req);
 
   if (!context) {
-    return sendError('Authentication required', 'UNAUTHORIZED', 401);
+    return sendError('Authentication required. Please login again.', 'UNAUTHORIZED', 401);
   }
 
   return context;

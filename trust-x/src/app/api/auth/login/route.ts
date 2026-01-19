@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
     const db = await getDb();
     const user = await db.collection('users').findOne({ email });
     if (!user) {
-      logger.logAuth('login_failed', undefined, false, context.requestId);
+      logger.logAuth('login', 'failed', undefined, context.requestId);
       logger.warn('Login failed - user not found', {
         requestId: context.requestId,
         email,
@@ -38,10 +38,10 @@ export async function POST(req: NextRequest) {
     // Verify password
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
-      logger.logAuth('login_failed', user.id, false, context.requestId);
+      logger.logAuth('login', 'failed', user._id.toString(), context.requestId);
       logger.warn('Login failed - invalid password', {
         requestId: context.requestId,
-        userId: user.id,
+        userId: user._id.toString(),
       });
       logRequestCompletion(context, req, 401);
       return NextResponse.json(
@@ -51,15 +51,15 @@ export async function POST(req: NextRequest) {
     }
 
     // Generate tokens
-    const payload = { id: user.id, email: user.email, role: user.role };
+    const payload = { id: user._id.toString(), email: user.email, role: user.role };
     const accessToken = generateAccessToken(payload);
     const refreshToken = generateRefreshToken(payload);
 
     // Log successful authentication
-    logger.logAuth('login_success', user.id, true, context.requestId);
+    logger.logAuth('login', 'success', user._id.toString(), context.requestId);
     logger.info('User logged in successfully', {
       requestId: context.requestId,
-      userId: user.id,
+      userId: user._id.toString(),
       email: user.email,
       role: user.role,
     });
